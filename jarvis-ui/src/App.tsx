@@ -23,6 +23,7 @@ function App() {
     const [showDashboard, setShowDashboard] = useState(false);
     const [showStrategy, setShowStrategy] = useState(false);
     const [whatsappConnected, setWhatsappConnected] = useState(false);
+    const [showQRModal, setShowQRModal] = useState(true);
     const hasWelcomed = useRef(false);
 
     // Auto-start passive listening on mount
@@ -96,8 +97,11 @@ function App() {
             {/* Scanline Overlay Removed */}
 
             {/* WhatsApp QR Panel (non-blocking, bottom-right) */}
-            {!whatsappConnected && (
-                <WhatsAppQR onConnected={() => setWhatsappConnected(true)} />
+            {!whatsappConnected && showQRModal && (
+                <WhatsAppQR
+                    onConnected={() => setWhatsappConnected(true)}
+                    onClose={() => setShowQRModal(false)}
+                />
             )}
 
             {/* No overlay needed — system auto-starts on mount */}
@@ -121,6 +125,7 @@ function App() {
                 whatsappConnected={whatsappConnected}
                 onResetWhatsapp={handleResetWhatsApp}
                 isTalkMode={isTalkMode}
+                onToggleQR={() => setShowQRModal(!showQRModal)}
             />
 
             {/* Header */}

@@ -6,9 +6,10 @@ interface SystemStatusProps {
     whatsappConnected?: boolean;
     onResetWhatsapp?: () => void;
     isTalkMode?: boolean;
+    onToggleQR?: () => void;
 }
 
-const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceState = 'IDLE', whatsappConnected = false, onResetWhatsapp, isTalkMode = false }) => {
+const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceState = 'IDLE', whatsappConnected = false, onResetWhatsapp, isTalkMode = false, onToggleQR }) => {
     const [cpuUsage, setCpuUsage] = useState(12);
     const [memUsage, setMemUsage] = useState(45);
     const [netPing, setNetPing] = useState(24);
@@ -123,6 +124,15 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceS
                             title="Force Reset WhatsApp Session"
                         >
                             RST
+                        </button>
+                    )}
+                    {!whatsappConnected && onToggleQR && (
+                        <button
+                            onClick={onToggleQR}
+                            className="text-[9px] text-cyan-400 px-1 border border-cyan-400/30 rounded hover:bg-cyan-400/20 transition-colors"
+                            title="Show QR Code"
+                        >
+                            [QR]
                         </button>
                     )}
                 </div>

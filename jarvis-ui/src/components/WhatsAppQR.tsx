@@ -4,9 +4,10 @@ import { io } from 'socket.io-client';
 
 interface WhatsAppQRProps {
     onConnected?: () => void;
+    onClose?: () => void;
 }
 
-const WhatsAppQR: React.FC<WhatsAppQRProps> = ({ onConnected }) => {
+const WhatsAppQR: React.FC<WhatsAppQRProps> = ({ onConnected, onClose }) => {
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
     const [status, setStatus] = useState<'loading' | 'qr' | 'connected' | 'dismissed'>('loading');
     const pollRef = useRef<NodeJS.Timeout>();
@@ -34,8 +35,9 @@ const WhatsAppQR: React.FC<WhatsAppQRProps> = ({ onConnected }) => {
         clearInterval(pollRef.current);
         onConnected?.();
         // Auto-hide after 3 seconds
-        setTimeout(() => setStatus('dismissed'), 3000);
-    }, [onConnected]);
+        if (onClose) onClose();
+        else setStatus('dismissed');
+    }, [onConnected, onClose]);
 
     // Socket — gets QR the instant it's generated
     useEffect(() => {
@@ -92,7 +94,7 @@ const WhatsAppQR: React.FC<WhatsAppQRProps> = ({ onConnected }) => {
                     <span className="font-mono text-cyan-400 text-[11px] tracking-widest uppercase">WhatsApp</span>
                 </div>
                 <button
-                    onClick={() => setStatus('dismissed')}
+                    onClick={() => onClose ? onClose() : setStatus('dismissed')}
                     className="text-cyan-400/30 hover:text-cyan-400/80 text-[10px] font-mono transition-colors"
                     title="Dismiss"
                 >
