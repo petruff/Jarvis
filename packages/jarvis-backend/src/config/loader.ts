@@ -6,6 +6,8 @@ dotenv.config();
 export interface JarvisConfig {
     llm: {
         primary: string;
+        anthropic_api_key?: string;
+        anthropic_model?: string;
         deepseek_api_key?: string;
         moonshot_api_key?: string;
         openai_api_key?: string;
@@ -44,7 +46,7 @@ export interface JarvisConfig {
 }
 
 const DEFAULT_CONFIG: JarvisConfig = {
-    llm: { primary: 'deepseek' },
+    llm: { primary: 'claude' },
     voice: { provider: 'openai', openai_voice: 'onyx', openai_model: 'tts-1' },
     messaging: { whatsapp_enabled: true },
     jarvis: {
@@ -95,6 +97,8 @@ export function loadConfig(): JarvisConfig {
     };
 
     // Environmental Fallbacks for Transition Period
+    if (!config.llm.anthropic_api_key) config.llm.anthropic_api_key = process.env.ANTHROPIC_API_KEY;
+    if (!config.llm.anthropic_model) config.llm.anthropic_model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
     if (!config.llm.openai_api_key) config.llm.openai_api_key = process.env.OPENAI_API_KEY;
     if (!config.voice.openai_voice) config.voice.openai_voice = process.env.OPENAI_VOICE;
     if (!config.llm.deepseek_api_key) config.llm.deepseek_api_key = process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY;
