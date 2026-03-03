@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface SystemStatusProps {
     isConnected?: boolean;
@@ -9,25 +9,78 @@ interface SystemStatusProps {
 }
 
 const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceState = 'IDLE', whatsappConnected = false, onResetWhatsapp, isTalkMode = false }) => {
+    const [cpuUsage, setCpuUsage] = useState(12);
+    const [memUsage, setMemUsage] = useState(45);
+    const [netPing, setNetPing] = useState(24);
+
+    // Provide real-time fluctuating data to make the HUD look alive
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCpuUsage(prev => {
+                const fluctuation = Math.floor(Math.random() * 15) - 5;
+                let next = prev + fluctuation;
+                if (next < 2) next = 2;
+                if (next > 98) next = 98;
+                return next;
+            });
+
+            setMemUsage(prev => {
+                const fluctuation = Math.floor(Math.random() * 5) - 2;
+                let next = prev + fluctuation;
+                if (next < 30) next = 30;
+                if (next > 85) next = 85;
+                return next;
+            });
+
+            setNetPing(() => {
+                const next = Math.floor(Math.random() * 15) + 15; // 15ms - 30ms
+                return next;
+            });
+        }, 1500);
+        return () => clearInterval(interval);
+    }, []);
+
+    // Also get real local hardware config if available
+    const cores = navigator.hardwareConcurrency || 8;
+    const memTotal = (navigator as any).deviceMemory || 16;
+
     return (
         <div className="absolute top-8 right-8 flex flex-col items-end gap-2 font-mono text-xs z-20" role="status" aria-label="System Statistics">
             {/* CPU Status */}
             <div className="flex items-center gap-3">
-                <span className="text-jarvis-primary/50 tracking-widest">CPU.CORE</span>
-                <div className="w-24 h-1.5 bg-jarvis-surface border border-jarvis-primary/30 rounded-full overflow-hidden">
-                    <div className="h-full bg-jarvis-primary shadow-glow animate-pulse" style={{ width: '38%' }}></div>
+                <div className="flex flex-col items-end leading-tight">
+                    <span className="text-jarvis-primary/50 tracking-widest text-[9px]">CPU [{cores} CORES]</span>
+                    <span className="text-jarvis-primary font-bold text-sm shadow-glow-sm">{cpuUsage}%</span>
                 </div>
-                <span className="text-jarvis-primary font-bold">38%</span>
+                <div className="w-24 h-1.5 bg-jarvis-surface border border-jarvis-primary/30 rounded-full overflow-hidden relative">
+                    <div
+                        className="absolute top-0 left-0 h-full bg-jarvis-primary shadow-glow transition-all duration-700 ease-in-out"
+                        style={{ width: `${cpuUsage}%` }}
+                    ></div>
+                </div>
             </div>
 
             {/* Memory Status */}
-            <div className="flex items-center gap-3">
-                <span className="text-jarvis-primary/50 tracking-widest">MEM.ALLOC</span>
-                <div className="w-24 h-1.5 bg-jarvis-surface border border-jarvis-primary/30 rounded-full overflow-hidden">
-                    <div className="h-full bg-jarvis-secondary shadow-glow" style={{ width: '64%' }}></div>
+            <div className="flex items-center gap-3 mt-1">
+                <div className="flex flex-col items-end leading-tight">
+                    <span className="text-jarvis-secondary/50 tracking-widest text-[9px]">MEM [{memTotal}GB]</span>
+                    <span className="text-jarvis-secondary font-bold text-sm shadow-glow-sm">{memUsage}%</span>
                 </div>
-                <span className="text-jarvis-secondary font-bold">16TB</span>
+                <div className="w-24 h-1.5 bg-jarvis-surface border border-jarvis-secondary/30 rounded-full overflow-hidden relative">
+                    <div
+                        className="absolute top-0 left-0 h-full bg-jarvis-secondary shadow-glow transition-all duration-1000 ease-in-out"
+                        style={{ width: `${memUsage}%` }}
+                    ></div>
+                </div>
             </div>
+
+            {/* Network Latency */}
+            <div className="flex items-center gap-3 mt-1">
+                <span className="text-jarvis-primary/50 tracking-widest text-[10px]">NET.PING</span>
+                <span className="text-jarvis-success font-bold w-8 text-right shadow-glow-sm">{netPing}ms</span>
+            </div>
+
+            <div className="w-full h-px bg-gradient-to-r from-transparent to-jarvis-primary/30 my-2"></div>
 
             {/* Voice Status */}
             <div className="flex items-center gap-3">
@@ -48,30 +101,30 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceS
             {/* Secure Net Status */}
             <div className="flex items-center gap-3">
                 <span className={`text-[10px] tracking-widest ${isConnected ? 'text-jarvis-primary/50' : 'text-jarvis-alert/50'}`}>SECURE.NET</span>
-                <div className="flex gap-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-jarvis-success animate-pulse' : 'bg-jarvis-alert'}`}></div>
-                    <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-jarvis-success/50' : 'bg-jarvis-alert/50'}`}></div>
-                    <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-jarvis-success/30' : 'bg-jarvis-alert/30'}`}></div>
+                <div className="flex gap-1 justify-end w-4">
+                    <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-jarvis-success shadow-[0_0_5px_rgba(0,255,100,0.8)]' : 'bg-jarvis-alert'}`}></div>
                 </div>
-                <span className={`text-[10px] font-bold ${isConnected ? 'text-jarvis-success' : 'text-jarvis-alert'}`}>
+                <span className={`text-[10px] font-bold ${isConnected ? 'text-jarvis-success shadow-glow-sm' : 'text-jarvis-alert'}`}>
                     {isConnected ? 'ON' : 'OFFLINE'}
                 </span>
             </div>
 
-            {/* WhatsApp Status - NEW */}
-            <div className="flex items-center gap-3 mt-1 pt-1 border-t border-jarvis-primary/10">
+            {/* WhatsApp Status */}
+            <div className="flex items-center gap-3">
                 <span className={`text-[10px] tracking-widest ${whatsappConnected ? 'text-jarvis-success/50' : 'text-jarvis-alert/50'}`}>WHATSAPP</span>
                 <div className="flex gap-2 items-center">
-                    <span className={`text-[10px] font-bold ${whatsappConnected ? 'text-jarvis-success' : 'text-jarvis-alert'}`}>
-                        {whatsappConnected ? 'LINKED' : 'NOT LINKED'}
+                    <span className={`text-[10px] font-bold ${whatsappConnected ? 'text-jarvis-success shadow-glow-sm' : 'text-jarvis-alert'}`}>
+                        {whatsappConnected ? 'LINKED' : 'UNLINKED'}
                     </span>
-                    <button
-                        onClick={() => onResetWhatsapp && onResetWhatsapp()}
-                        className="text-[9px] text-jarvis-alert px-1 border border-jarvis-alert/30 rounded hover:bg-jarvis-alert/10 transition-colors"
-                        title="Force Reset WhatsApp Session"
-                    >
-                        RESET
-                    </button>
+                    {whatsappConnected && onResetWhatsapp && (
+                        <button
+                            onClick={onResetWhatsapp}
+                            className="text-[9px] text-jarvis-alert/80 px-1 border border-jarvis-alert/30 rounded hover:bg-jarvis-alert/20 transition-colors"
+                            title="Force Reset WhatsApp Session"
+                        >
+                            RST
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

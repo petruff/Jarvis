@@ -91,8 +91,7 @@ function App() {
             {/* A2UI CANVAS WORKSPACE */}
             <CanvasWorkspace socket={socket} />
 
-            {/* Scanline Overlay */}
-            <div className="scanline"></div>
+            {/* Scanline Overlay Removed */}
 
             {/* WhatsApp QR Panel (non-blocking, bottom-right) */}
             {!whatsappConnected && (
@@ -103,9 +102,10 @@ function App() {
 
 
 
-            {/* Background Grid */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(0,243,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,243,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black_60%,transparent_100%)] pointer-events-none z-0"></div>
-            <div className="absolute inset-0 bg-radial-gradient from-transparent via-jarvis-surface/50 to-jarvis-dark z-0"></div>
+            {/* Background Radial & Grid Mesh */}
+            <div className="fixed inset-0 bg-[#070b14] z-[-2]"></div>
+            <div className="fixed inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)] pointer-events-none z-[-1] mix-blend-screen overflow-hidden"></div>
+            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(7,11,20,0.8)_80%,rgba(7,11,20,1)_100%)] z-[-1]"></div>
 
             {/* Decorative Data Streams */}
             <DataStreams />
@@ -142,7 +142,7 @@ function App() {
                 {/* Info Bar / Stats */}
                 <div className="w-full max-w-3xl flex items-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider mb-4 relative z-10" aria-hidden="true">
                     <div className="w-2 h-2 rounded-full bg-jarvis-primary shadow-glow animate-pulse"></div>
-                    <span>Logs analisados para esta conversa — 243 arquivos</span>
+                    <span>SYSTEM NOMINAL — NEURAL CLUSTER ONLINE</span>
                     <div className="flex-1 h-px bg-jarvis-primary/20"></div>
 
                     <button
@@ -158,7 +158,7 @@ function App() {
                         [{showStrategy ? 'CLOSE PLAN' : '🚀 V5 PLAN'}]
                     </button>
 
-                    <span>Padrão - Ric</span>
+                    <span>PROTOCOL — ACTIVE</span>
                     <div className="w-2 h-2 rounded-full bg-jarvis-primary/50"></div>
                 </div>
 
