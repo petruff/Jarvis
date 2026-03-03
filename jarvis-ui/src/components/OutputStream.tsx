@@ -26,7 +26,7 @@ const OutputStream: React.FC<OutputStreamProps> = ({ transcript, isScanning, use
                 <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-jarvis-primary"></div>
 
                 {/* Content - Molecule */}
-                <div className="font-mono text-lg leading-relaxed mb-2 h-48 md:h-64 overflow-y-auto scrollbar-hide pr-2">
+                <div className="font-mono text-lg leading-relaxed mb-2 max-h-[15vh] md:max-h-[22vh] overflow-y-auto scrollbar-hide pr-2">
                     <span className="text-jarvis-primary font-bold shadow-glow-sm">JARVIS: </span>
                     <span className="text-white drop-shadow-md">
                         {isScanning ? "Iniciando protocolos de segurança..." :

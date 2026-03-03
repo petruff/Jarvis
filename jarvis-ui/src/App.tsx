@@ -139,57 +139,64 @@ function App() {
             </header>
 
             {/* Main Content Area */}
-            <main className="flex-1 w-full max-w-7xl mx-auto pointer-events-none relative z-10">
+            <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto relative z-10 px-4 pt-4 pb-2 h-full overflow-hidden">
 
-                <ConnectorLines />
+                {/* Top Section: Flexible Arc Container */}
+                <div className="flex-1 flex items-center justify-center relative w-full min-h-[30vh] pointer-events-none overflow-visible">
+                    <ConnectorLines />
 
-                {/* Central Visualizer - Absolute Centered */}
-                <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 z-0 opacity-80 ${voiceState === 'LISTENING' ? 'scale-110' : ''}`}>
-                    <JarvisCore isSpeaking={voiceState === 'SPEAKING'} isListening={voiceState === 'LISTENING'} />
+                    {/* Central Visualizer - Scales defensively on short screens to avoid clipping */}
+                    <div className={`transition-all duration-500 z-0 opacity-90 scale-75 md:scale-90 lg:scale-100 ${voiceState === 'LISTENING' ? 'scale-[1.15] lg:scale-110' : ''}`}>
+                        <JarvisCore isSpeaking={voiceState === 'SPEAKING'} isListening={voiceState === 'LISTENING'} />
+                    </div>
                 </div>
 
-                {/* Info Bar / Stats (Fixed above Control Deck) */}
-                <div className="fixed bottom-[max(320px,35vh)] left-1/2 -translate-x-1/2 w-full max-w-3xl flex items-center justify-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider z-20 pointer-events-auto">
-                    <div className="w-2 h-2 rounded-full bg-jarvis-primary shadow-glow animate-pulse"></div>
-                    <span>SYSTEM NOMINAL — NEURAL CLUSTER ONLINE</span>
-                    <div className="flex-1 h-px bg-jarvis-primary/20"></div>
+                {/* Bottom Section: Control Deck & Info Bar */}
+                <div className="w-full max-w-3xl mx-auto flex flex-col gap-3 z-20 pointer-events-auto shrink-0 justify-end pb-2">
 
-                    <button
-                        onClick={() => setShowDashboard(!showDashboard)}
-                        className="hover:text-cyan-400 hover:shadow-[0_0_15px_rgba(0,243,255,0.8)] transition-all duration-300 cursor-pointer mr-4 border border-jarvis-primary/30 px-3 py-1 bg-jarvis-primary/10 rounded backdrop-blur-sm animate-pulse"
-                    >
-                        [{showDashboard ? 'CLOSE SQUAD' : '⚡ SQUAD'}]
-                    </button>
-                    <button
-                        onClick={() => setShowStrategy(!showStrategy)}
-                        className="hover:text-gold-400 hover:shadow-[0_0_15px_rgba(255,215,0,0.8)] text-yellow-500 transition-all duration-300 cursor-pointer mr-4 border border-yellow-500/30 px-3 py-1 bg-yellow-500/10 rounded backdrop-blur-sm animate-pulse"
-                    >
-                        [{showStrategy ? 'CLOSE PLAN' : '🚀 V5 PLAN'}]
-                    </button>
+                    {/* Info Bar / Stats */}
+                    <div className="w-full flex items-center justify-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider">
+                        <div className="w-2 h-2 rounded-full bg-jarvis-primary shadow-glow animate-pulse"></div>
+                        <span className="hidden sm:inline">SYSTEM NOMINAL — NEURAL CLUSTER ONLINE</span>
+                        <span className="sm:hidden">SYSTEM ONLINE</span>
+                        <div className="flex-1 h-px bg-jarvis-primary/20"></div>
 
-                    <span>PROTOCOL — ACTIVE</span>
-                    <div className="w-2 h-2 rounded-full bg-jarvis-primary/50"></div>
-                </div>
+                        <button
+                            onClick={() => setShowDashboard(!showDashboard)}
+                            className="hover:text-cyan-400 hover:shadow-[0_0_15px_rgba(0,243,255,0.8)] transition-all duration-300 cursor-pointer mr-2 border border-jarvis-primary/30 px-3 py-1 bg-jarvis-primary/10 rounded backdrop-blur-sm animate-pulse"
+                        >
+                            [{showDashboard ? 'CLOSE SQUAD' : '⚡ SQUAD'}]
+                        </button>
+                        <button
+                            onClick={() => setShowStrategy(!showStrategy)}
+                            className="hover:text-gold-400 hover:shadow-[0_0_15px_rgba(255,215,0,0.8)] text-yellow-500 transition-all duration-300 cursor-pointer border border-yellow-500/30 px-3 py-1 bg-yellow-500/10 rounded backdrop-blur-sm animate-pulse"
+                        >
+                            [{showStrategy ? 'CLOSE PLAN' : '🚀 V5 PLAN'}]
+                        </button>
 
-                {/* Control Deck (Fixed strictly to bottom center) */}
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl z-20 flex flex-col gap-3 pointer-events-auto px-4">
+                        <div className="hidden sm:block flex-1 h-px bg-jarvis-primary/20"></div>
+                        <span className="hidden sm:inline">PROTOCOL — ACTIVE</span>
+                        <div className="hidden sm:block w-2 h-2 rounded-full bg-jarvis-primary/50"></div>
+                    </div>
+
                     {/* Output Stream Box */}
-                    <div className="w-full">
+                    <div className="w-full" style={{ maxHeight: '35vh' }}>
                         <OutputStream transcript={transcript} isScanning={!user} user={user} lastResponse={lastResponse} logs={logs} />
                     </div>
 
                     {/* Agent Selector Buttons */}
-                    <div className="w-full flex items-center gap-2">
+                    <div className="w-full flex items-center gap-2 mt-1">
                         <AgentSelector selectedAgent={selectedAgent} onSelect={handleAgentSelect} />
                         <button
                             onClick={() => speak("Voice systems calibrated. Ready for instruction.")}
-                            className="bg-jarvis-primary/10 border border-jarvis-primary/30 text-jarvis-primary hover:bg-jarvis-primary/20 px-3 py-2 rounded text-xs font-mono uppercase tracking-widest transition-all"
+                            className="bg-jarvis-primary/10 border border-jarvis-primary/30 text-jarvis-primary hover:bg-jarvis-primary/20 px-3 py-2 rounded text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap"
                             title="Test Voice Output"
                         >
                             🔊 TEST
                         </button>
                     </div>
 
+                    {/* Input Module */}
                     <CommandInput
                         onSend={(text) => sendCommand(text, selectedAgent)}
                         isListening={voiceState === 'LISTENING' || voiceState === 'PASSIVE'}
