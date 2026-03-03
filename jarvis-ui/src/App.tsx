@@ -13,6 +13,8 @@ import SquadDashboard from './components/SquadDashboard';
 import StrategyDashboard from './components/StrategyDashboard';
 import WhatsAppQR from './components/WhatsAppQR';
 import CanvasWorkspace from './components/CanvasWorkspace';
+import LeftPanel from './components/LeftPanel';
+import RightPanel from './components/RightPanel';
 
 function App() {
     const { voiceState, transcript, speak, lastResponse, logs, sendCommand, startJarvis, stopJarvis, socket, isConnected, isTalkMode } = useJarvisVoice();
@@ -109,6 +111,8 @@ function App() {
 
             {/* Decorative Data Streams */}
             <DataStreams />
+            <LeftPanel />
+            <RightPanel />
 
             {/* System Status Organism */}
             <SystemStatus
