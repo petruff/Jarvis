@@ -60,14 +60,14 @@ import { createCacheAdapter } from './cache/adapter';
 
 // ── AGI ORCHESTRATOR SYSTEM ──────────────────────────────────────────────────
 import {
-  MasterOrchestrator,
-  SquadCreator,
-  TaskDecomposer,
-  AgentCoordinator,
-  SafetyGate,
-  ProgressTracker,
-  ResultMerger,
-  initializeAGIOrchestrator
+    MasterOrchestrator,
+    SquadCreator,
+    TaskDecomposer,
+    AgentCoordinator,
+    SafetyGate,
+    ProgressTracker,
+    ResultMerger,
+    initializeAGIOrchestrator
 } from './orchestrator/index';
 
 // ── Sprint 1: JARVIS Evolution v6.0 ──────────────────────────────────────────
@@ -1037,74 +1037,68 @@ const start = async () => {
                     socket.emit('jarvis/set_language', { lang });
                 }
 
-                // --- SQUAD INTERCEPTION (PHASE 5) ---
-                const routing = routeMission(cmd);
-                if (routing.confidence >= 25 || /squad|equipe|mission|missão|dispatch|inicie/i.test(cmd)) {
-                    fastify.log.info(`[Voice] Auto-routing complex command to ${routing.squad.name} squad (Confidence: ${routing.confidence}%)`);
+                // --- AGI ORCHESTRATION (THE REAL DEAL) ---
+                try {
+                    const intentCheckPrompt = `
+You are JARVIS.
+User Request: "${cmd}"
+Classify this request into one of two categories:
+1. "CONVERSATIONAL" - A simple question, personal greeting, check-in, or request for real-time data that you can answer directly.
+2. "GOAL" - A complex task requiring planning, research, coding, writing, or coordinating multiple agents over time.
 
-                    const ackText = lang === 'pt'
-                        ? `Recebido. Iniciando protocolo com o esquadrão ${routing.squad.name}. Emitirei um relatório ao final.`
-                        : `Acknowledged. Routing this mission to the ${routing.squad.name} squad. I will brief you when they finish.`;
+Return ONLY the single word "CONVERSATIONAL" or "GOAL". Nothing else.
+`;
+                    const classification = await queryLLM("Intent Classifier", intentCheckPrompt);
 
-                    memory.add('assistant', ackText);
-                    socket.emit('jarvis/response', { text: ackText, agent: activeAgent.id, silent: true });
-                    await processTextToSpeech(fastify, socket, ackText, undefined, activeAgent.id, lang);
+                    if (classification.trim().includes('GOAL')) {
+                        const ackText = lang === 'pt'
+                            ? 'Iniciando orquestração autônoma Master para a diretriz. Desenhando plano de execução e recrutando agentes em background...'
+                            : 'Initiating Master autonomous orchestration for the directive. Drawing execution plan and recruiting agents in the background...';
 
-                    socket.emit('squad/routed', {
-                        squadId: routing.squad.id,
-                        squadName: routing.squad.name,
-                        squadIcon: routing.squad.icon,
-                        confidence: routing.confidence,
-                        agents: routing.allocations.map(a => a.agentName),
-                    });
+                        memory.add('assistant', ackText);
+                        socket.emit('jarvis/response', { text: ackText, agent: activeAgent.id, silent: true });
+                        await processTextToSpeech(fastify, socket, ackText, undefined, activeAgent.id, lang);
 
-                    const task = createTask(cmd, routing.squad.name, routing.squad.icon, routing.allocations.map(a => a.agentId), 'HIGH', { source: 'ui' });
-                    socket.emit('squad/task_created', { taskId: task.id, squad: routing.squad.name, icon: routing.squad.icon });
-                    updateTask(task.id, { status: 'IN_PROGRESS' });
+                        // Reference global agiOrchestrator defined at top of index.ts
+                        if (typeof agiOrchestrator !== 'undefined' && agiOrchestrator) {
+                            agiOrchestrator.executeGoal(cmd, user)
+                                .then(async (result: any) => {
+                                    let finalMsg = typeof result === 'string' ? result : JSON.stringify(result);
+                                    if (finalMsg.length > 600) finalMsg = finalMsg.substring(0, 600) + '...';
 
-                    const startTime = Date.now();
-                    try {
-                        const finalReport = await runSquadPlan(task.id, cmd, routing.allocations, io, JARVIS_SYSTEM_PROMPT + projectContext, missionOrchestrator);
-                        const duration = Date.now() - startTime;
+                                    const summaryContext = `
+AGI Squad Orchestration has concluded.
+Goal: ${cmd}
+Result Raw: ${finalMsg}
 
-                        updateTask(task.id, {
-                            status: 'DONE',
-                            result: finalReport.slice(0, 2000),
-                            completedAt: new Date().toISOString(),
-                            durationMs: duration,
-                        });
-                        memory.logSquadTask(routing.squad.name, cmd, finalReport, duration);
-                        socket.emit('squad/task_complete', { taskId: task.id, squad: routing.squad.name, result: finalReport, durationMs: duration });
+Summarize this result for the user gracefully in ${lang === 'pt' ? 'Brazilian Portuguese' : 'English'} as JARVIS in 2 sentences. Present it as a final success report from the deployed squads.`;
 
-                        // Summarize and Speak result
-                        let summaryPrompt = `Summarize the following squad mission result into a concise 2-3 sentence vocal briefing for the user:\n\n${finalReport.slice(0, 3000)}`;
-                        if (lang === 'pt') {
-                            summaryPrompt = `Resuma o seguinte resultado da missão do esquadrão em um briefing vocal curto de 2-3 frases para o usuário.\nDEVE SER RESPONDIDO EM PORTUGUÊS:\n\n${finalReport.slice(0, 3000)}`;
+                                    const summary = await queryLLM(JARVIS_SYSTEM_PROMPT, summaryContext);
+                                    socket.emit('jarvis/response', { text: summary, silent: true });
+                                    memory.add('assistant', `[AGI Orchestration Complete]: ${summary}`);
+
+                                    const summarySentences = summary.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [summary];
+                                    for (const sentence of summarySentences) {
+                                        if (sentence.trim().length > 2) {
+                                            try { await processTextToSpeech(fastify, socket, sentence, undefined, activeAgent.id, lang); } catch (e) { }
+                                        }
+                                    }
+                                })
+                                .catch(async (err: any) => {
+                                    const failMsg = lang === 'pt'
+                                        ? `Senhor, ocorreu um erro crítico na orquestração AGI: ${err.message}`
+                                        : `Sir, a critical error occurred in AGI Orchestration: ${err.message}`;
+
+                                    socket.emit('jarvis/response', { text: failMsg, silent: true });
+                                    try { await processTextToSpeech(fastify, socket, failMsg, undefined, activeAgent.id, lang); } catch (e) { }
+                                });
+                            return; // Yield early so the bot doesn't fall through to conversational reply
+                        } else {
+                            fastify.log.warn('[Voice] agiOrchestrator not found, falling back to conversational.');
                         }
-
-                        const speechSummary = (await queryLLM(JARVIS_SYSTEM_PROMPT, summaryPrompt)).replace(/[*#`]/g, '');
-                        memory.add('assistant', speechSummary);
-                        socket.emit('jarvis/response', { text: speechSummary, agent: activeAgent.id, silent: true });
-
-                        const summarySentences = speechSummary.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [speechSummary];
-                        for (const sentence of summarySentences) {
-                            if (sentence.trim().length > 2) {
-                                try { await processTextToSpeech(fastify, socket, sentence, undefined, activeAgent.id, lang); } catch (e) { }
-                            }
-                        }
-                    } catch (err: any) {
-                        fastify.log.error(`[Voice] Squad mission failed: ${err.message}`);
-                        updateTask(task.id, { status: 'FAILED', result: err.message });
-                        socket.emit('squad/error', { taskId: task.id, message: err.message });
-
-                        const failMsg = lang === 'pt'
-                            ? `Senhor, o esquadrão ${routing.squad.name} encontrou um erro ao executar a missão.`
-                            : `Sir, the ${routing.squad.name} squad encountered an error executing the mission.`;
-
-                        socket.emit('jarvis/response', { text: failMsg, silent: true });
-                        await processTextToSpeech(fastify, socket, failMsg, undefined, activeAgent.id, lang);
                     }
-                    return; // Stop execution here, we handled it via the squad!
+                } catch (e) {
+                    fastify.log.error(`[Voice] AGI Orchestration classification failed: ${e}`);
                 }
 
                 let context = '';
