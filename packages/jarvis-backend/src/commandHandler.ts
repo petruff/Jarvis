@@ -266,108 +266,54 @@ Task: Summarize this system status briefly and highly professionally, sounding e
             return;
         }
 
-        // --- 3. MASTER ORCHESTRATION ---
-        const orchestrationPrompt = `
-        You are the Master Orchestrator (Jarvis).
-        User Request: "${cmd}"
-        Available Agents: ${agentRegistry.getAllAgents().map(a => a.name).join(', ')}.
-
-        Decide on the best course of action. Return JSON ONLY.
-        
-        Scenarios:
-        1. **CREATE_AGENT**: If user wants to hire/recruit.
-        2. **DELEGATE**: If request needs specific agent action.
-        3. **SQUAD_PLAN**: If request is a project needing multiple agents.
-        4. **ANSWER**: General question.
-
-        JSON Formats:
-        { "type": "CREATE_AGENT", "name": "...", "role": "...", "description": "...", "systemPrompt": "..." }
-        { "type": "DELEGATE", "targetAgentId": "...", "task": "..." }
-        { "type": "SQUAD_PLAN", "narrative": "...", "allocations": [{ "agentId": "...", "task": "..." }] }
-        { "type": "ANSWER", "response": "..." }
-        `;
-
+        // --- 3. AGI ORCHESTRATION (THE REAL DEAL) ---
         try {
-            const analysis = await queryLLM("You are a JSON-outputting Orchestrator.", orchestrationPrompt);
-            const cleanAnalysis = analysis.replace(/```json/g, '').replace(/```/g, '').trim();
-            let plan;
-            try {
-                plan = JSON.parse(cleanAnalysis);
-            } catch (jsonError) {
-                console.log("Orchestration JSON parse failed, falling back to direct answer.");
-            }
+            // Fast intent classifier to segregate true complex goals from casual conversation
+            const intentCheckPrompt = `
+You are JARVIS.
+User Request: "${cmd}"
+Classify this request into one of two categories:
+1. "CONVERSATIONAL" - A simple question, personal greeting, check-in, or request for real-time data that you can answer directly.
+2. "GOAL" - A complex task requiring planning, research, coding, writing, or coordinating multiple agents over time.
 
-            if (plan) {
-                if (plan.type === 'CREATE_AGENT') {
-                    const success = agentRegistry.createDynamicAgent(plan.name, plan.role, plan.description, plan.systemPrompt);
-                    if (success) onResponse(`✅ Recruited **${plan.name}**.`);
-                    else onResponse(`❌ Failed to recruit.`);
-                    return;
-                }
+Return ONLY the single word "CONVERSATIONAL" or "GOAL". Nothing else.
+`;
+            const classification = await queryLLM("Intent Classifier", intentCheckPrompt);
 
-                if (plan.type === 'SQUAD_PLAN') {
-                    onResponse(`⚡ Launching Squad Protocol: ${plan.narrative}`);
-                    if (plan.allocations && Array.isArray(plan.allocations)) {
-                        // Cap allocations at 3 agents to prevent runaway parallel API usage
-                        const cappedAllocations = plan.allocations.slice(0, 3);
-                        if (plan.allocations.length > 3) {
-                            console.warn(`[CommandHandler] SQUAD_PLAN trimmed from ${plan.allocations.length} → 3 agents (cap enforced)`);
-                        }
-                        // Enrich each allocation with agent system prompts
-                        const enrichedAllocations = cappedAllocations.map((alloc: any) => {
-                            const agentDef = agentRegistry.getAgent(alloc.agentId);
-                            return {
-                                agentId: alloc.agentId || 'jarvis',
-                                agentName: agentDef?.name || alloc.agentId,
-                                task: alloc.task,
-                                systemPrompt: agentDef ? agentRegistry.buildSystemPrompt(agentDef) : this.JARVIS_SYSTEM_PROMPT,
-                            };
-                        });
+            if (classification.trim().includes('GOAL')) {
+                onResponse(`Iniciando orquestração autônoma Master para a diretriz. Desenhando plano de execução e recrutando agentes em background...`);
+                // Import lazy to avoid circular dependency issues at boot
+                const { agiOrchestrator } = require('./index');
 
-                        // Run all agents in PARALLEL — non-blocking
-                        const missionId = `cmd-${Date.now()}`;
-                        runSquadPlan(missionId, plan.narrative, enrichedAllocations, this.io, this.JARVIS_SYSTEM_PROMPT)
-                            .then(summary => {
-                                onResponse(summary);
-                                memory.add('assistant', summary);
-                            })
-                            .catch(err => {
-                                onResponse(`Squad error: ${err.message}`);
+                if (agiOrchestrator) {
+                    // Fire-and-forget orchestration
+                    agiOrchestrator.executeGoal(cmd, user)
+                        .then((result: any) => {
+                            let finalMsg = typeof result === 'string' ? result : JSON.stringify(result);
+                            if (finalMsg.length > 600) finalMsg = finalMsg.substring(0, 600) + '...';
+
+                            const summaryContext = `
+AGI Squad Orchestration has concluded.
+Goal: ${cmd}
+Result Raw: ${finalMsg}
+
+Summarize this result for the user gracefully in Brazilian Portuguese as JARVIS in 2 sentences. Present it as a final success report from the deployed squads.`;
+
+                            queryLLM(this.JARVIS_SYSTEM_PROMPT, summaryContext).then(summary => {
+                                this.io.emit('jarvis/response', { text: summary });
+                                memory.add('assistant', `[AGI Orchestration Complete]: ${summary}`);
                             });
-                    }
-                    return;
-                }
-
-
-                if (plan.type === 'DELEGATE') {
-                    const targetAgent = agentRegistry.getAgent(plan.targetAgentId);
-                    if (targetAgent) {
-                        onResponse(`Delegating to **${targetAgent.name}**...`);
-                        this.io.emit('jarvis/control', { type: 'switch_agent', agent: targetAgent.id });
-
-                        const result = await runAgentLoop(
-                            plan.task,
-                            5, // Capped from 10 → 5 to limit API calls per delegation
-                            agentRegistry.buildSystemPrompt(targetAgent),
-                            this.io,
-                            targetAgent.id
-                        );
-                        onResponse(`**${targetAgent.name}** reports: ${result}`);
-                        memory.add('assistant', `[${targetAgent.name} REPORT]: ${result}`);
-                    } else {
-                        onResponse(`Agent '${plan.targetAgentId}' not found.`);
-                    }
-                    return;
-                }
-
-                if (plan.type === 'ANSWER') {
-                    onResponse(plan.response);
-                    memory.add('assistant', plan.response);
-                    return;
+                        })
+                        .catch((err: any) => {
+                            this.io.emit('jarvis/response', { text: `Erro crítico reportado pela orquestração AGI: ${err.message}` });
+                        });
+                    return; // Yield early, letting the background process run without blocking
+                } else {
+                    console.warn('[CommandHandler] agiOrchestrator not found, falling back to conversational.');
                 }
             }
         } catch (e) {
-            console.error("Orchestration failed", e);
+            console.error("AGI Orchestration classification failed", e);
         }
 
         // Fallback: Streamed Direct Answer
