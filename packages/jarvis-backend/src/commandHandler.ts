@@ -149,7 +149,7 @@ export class CommandHandler {
         }
 
         // --- 2.2 REPORTING COMMANDS (*status, *team, *brief) ---
-        if (cmd === '*team' || cmd === 'team status') {
+        if (cmd === '*team' || cmd === 'team status' || cmd === 'squad status') {
             const squadYaml = require('js-yaml').load(require('fs').readFileSync('squads/ai-squad-team/squad.yaml', 'utf8'));
             let report = "## 🛡️ JARVIS SQUAD ROSTER\n\n";
             let totalAgents = 0;
@@ -163,6 +163,36 @@ export class CommandHandler {
             }
             report += `**Total Active Agents:** ${totalAgents}`;
             onResponse(report);
+            return;
+        }
+
+        if (cmd.includes('status do sistema') || cmd.includes('system status') || cmd === '*status') {
+            onResponse(`Compilando diagnóstico do sistema...`);
+            try {
+                const { getTelemetry } = require('./telemetry');
+                const telemetry = getTelemetry();
+
+                const { getRateLimiterStatus } = require('./rateLimiter');
+                const rateLimit = getRateLimiterStatus();
+
+                const context = `
+[REAL-TIME SYSTEM TELEMETRY]
+CPU Usage: ${telemetry.cpuUsage.toFixed(1)}%
+Memory Usage: ${telemetry.memoryUsageMB.toFixed(0)} MB
+Uptime: ${telemetry.uptimeHours.toFixed(2)} hours
+Circuit Breaker: ${rateLimit.circuitOpen ? 'OPEN (BLOCKED)' : 'CLOSED (HEALTHY)'}
+API Calls Today: ${rateLimit.totalCallsToday}
+
+User Question: ${cmd}
+Task: Summarize this system status briefly and highly professionally, sounding exactly like Jarvis. State the CPU, Memory and API Health.
+`;
+                const response = await queryLLM(this.JARVIS_SYSTEM_PROMPT, context);
+                const cleanResponse = response.replace(/\*\*/g, '').replace(/\*/g, '').replace(/#/g, '');
+                onResponse(cleanResponse);
+                memory.add('assistant', cleanResponse);
+            } catch (e: any) {
+                onResponse(`System diagnostics currently unavailable: ${e.message}`);
+            }
             return;
         }
 
