@@ -46,7 +46,7 @@ export interface JarvisConfig {
 }
 
 const DEFAULT_CONFIG: JarvisConfig = {
-    llm: { primary: 'claude' },
+    llm: { primary: 'claude', anthropic_model: 'claude-3-5-sonnet-20241022' },
     voice: { provider: 'openai', openai_voice: 'onyx', openai_model: 'tts-1' },
     messaging: { whatsapp_enabled: true },
     jarvis: {
@@ -96,14 +96,20 @@ export function loadConfig(): JarvisConfig {
         chroma: { ...DEFAULT_CONFIG.chroma, ...fileConfig.chroma }
     };
 
-    // Environmental Fallbacks for Transition Period
+    // ── Primary LLM: Claude / Anthropic ──────────────────────────────────────
     if (!config.llm.anthropic_api_key) config.llm.anthropic_api_key = process.env.ANTHROPIC_API_KEY;
     if (!config.llm.anthropic_model) config.llm.anthropic_model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-    if (!config.llm.openai_api_key) config.llm.openai_api_key = process.env.OPENAI_API_KEY;
-    if (!config.voice.openai_voice) config.voice.openai_voice = process.env.OPENAI_VOICE;
+    // Enforce primary = 'claude' regardless of file config
+    config.llm.primary = 'claude';
+
+    // ── Fallback LLM providers ────────────────────────────────────────────────
     if (!config.llm.deepseek_api_key) config.llm.deepseek_api_key = process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY;
     if (!config.llm.moonshot_api_key) config.llm.moonshot_api_key = process.env.MOONSHOT_API_KEY;
     if (!config.llm.google_api_key) config.llm.google_api_key = process.env.GOOGLE_API_KEY;
+
+    // ── Supporting services (Whisper transcription, Voice) ────────────────────
+    if (!config.llm.openai_api_key) config.llm.openai_api_key = process.env.OPENAI_API_KEY;
+    if (!config.voice.openai_voice) config.voice.openai_voice = process.env.OPENAI_VOICE;
 
     if (!config.messaging.telegram_token) config.messaging.telegram_token = process.env.TELEGRAM_BOT_TOKEN;
     if (!config.messaging.founder_telegram_id) config.messaging.founder_telegram_id = process.env.FOUNDER_TELEGRAM_ID;
@@ -114,9 +120,18 @@ export function loadConfig(): JarvisConfig {
     if (!config.tools.composio_api_key) config.tools.composio_api_key = process.env.COMPOSIO_API_KEY;
     if (!config.tools.github_token) config.tools.github_token = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
 
-    // Validation (Silent warns just for LLM, critical for embedding)
+    // ── Validation ────────────────────────────────────────────────────────────
+    if (!config.llm.anthropic_api_key) {
+        console.warn('[CONFIG] ⚠️  Missing ANTHROPIC_API_KEY — Claude (primary LLM) will be unavailable!');
+        console.warn('[CONFIG]    Set ANTHROPIC_API_KEY in your .env file. Get a key at https://console.anthropic.com/');
+    } else {
+        console.log(`[CONFIG] ✅ Claude primary LLM ready (model: ${config.llm.anthropic_model})`);
+    }
+    if (!config.llm.deepseek_api_key && !config.llm.moonshot_api_key) {
+        console.warn('[CONFIG] ⚠️  No fallback LLM keys (DEEPSEEK_API_KEY / MOONSHOT_API_KEY). If Claude fails, no fallback is available.');
+    }
     if (!config.llm.openai_api_key) {
-        console.warn('[CONFIG] Missing openai_api_key (Needed for Embeddings)');
+        console.warn('[CONFIG]    Missing OPENAI_API_KEY (optional — needed for Whisper audio transcription only)');
     }
 
     return config;

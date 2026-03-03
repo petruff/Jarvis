@@ -19,6 +19,7 @@
     "author": "Electron AAOS Electron AAOS",
     "license": "MIT",
     "dependencies": {
+        "@anthropic-ai/sdk": "^0.36.3",
         "@fastify/cors": "^8.4.1",
         "@google/generative-ai": "^0.24.1",
         "@modelcontextprotocol/sdk": "^1.26.0",
@@ -44,7 +45,6 @@
         "ioredis": "^5.9.3",
         "jimp": "^1.6.0",
         "js-yaml": "^4.1.1",
-        "lancedb": "^1.0.0",
         "node-cron": "^4.2.1",
         "nodemailer": "^8.0.1",
         "openai": "^4.20.1",
