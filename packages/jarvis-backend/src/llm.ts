@@ -1,12 +1,34 @@
 // src/llm.ts
-// LLM module — Claude (Anthropic) is PRIMARY. DeepSeek & Kimi are fallbacks.
+// ═══════════════════════════════════════════════════════════════════════════════
+//  JARVIS LLM Router — Tiered, cost-optimised
+//
+//  ROUTING ORDER (non-strategic squads):
+//   1. Cache          — <10ms,   FREE
+//   2. Ollama         — local,   FREE forever (no internet needed)
+//   3. Groq           — API,     FREE (6 000 req/day, Llama 3.3 70B)
+//   4. Claude Haiku   — API,     $0.25/$1.25 per 1M (strategic + fallback)
+//   5. DeepSeek       — API,     $0.14/$0.28 per 1M
+//   6. Kimi/Moonshot  — API,     last resort
+//
+//  STRATEGIC squads (board, vault, oracle, nexus):
+//   1. Cache
+//   2. Groq           — still free, and fast enough for strategy
+//   3. Claude Sonnet  — best quality for high-stakes decisions
+//   4. DeepSeek reasoner
+//   5. Kimi
+// ═══════════════════════════════════════════════════════════════════════════════
 
+import Groq from 'groq-sdk';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { checkRateLimit, recordCall } from './rateLimiter';
 
+dotenv.config();
+import { config } from './config/loader';
+
+// ─── Token metrics ────────────────────────────────────────────────────────────
 export const TokenMetrics = {
     promptTokens: 0,
     completionTokens: 0,
@@ -14,277 +36,418 @@ export const TokenMetrics = {
 };
 
 export const getAndResetTokenMetrics = () => {
-    const metrics = { ...TokenMetrics };
+    const m = { ...TokenMetrics };
     TokenMetrics.promptTokens = 0;
     TokenMetrics.completionTokens = 0;
     TokenMetrics.costUsd = 0;
-    return metrics;
+    return m;
 };
 
-// Pricing estimates (per 1M tokens)
+// Pricing per 1M tokens (USD)
 const PRICING = {
-    claude_sonnet: { prompt: 3.00, completion: 15.00 },
+    ollama: { prompt: 0, completion: 0 }, // FREE
+    groq: { prompt: 0, completion: 0 }, // FREE tier
     claude_haiku: { prompt: 0.25, completion: 1.25 },
+    claude_sonnet: { prompt: 3.00, completion: 15.00 },
     deepseek: { prompt: 0.14, completion: 0.28 },
     moonshot: { prompt: 1.00, completion: 1.00 },
 };
 
-// ===== FAST RESPONSE CACHE =====
+// ─── Response cache (1 hour TTL) ─────────────────────────────────────────────
 const responseCache = new Map<string, { response: string; timestamp: number }>();
-const CACHE_TTL = 3600000; // 1 hour
+const CACHE_TTL = 3_600_000;
 
-function getCacheKey(prompt: string): string {
-    return Buffer.from(prompt).toString('base64').substring(0, 50);
-}
+const cacheKey = (s: string) => Buffer.from(s).toString('base64').slice(0, 64);
+const fromCache = (k: string) => { const e = responseCache.get(k); return e && Date.now() - e.timestamp < CACHE_TTL ? e.response : null; };
+const toCache = (k: string, v: string) => responseCache.set(k, { response: v, timestamp: Date.now() });
 
-function getCachedResponse(prompt: string): string | null {
-    const key = getCacheKey(prompt);
-    const cached = responseCache.get(key);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        console.log('[LLM-CACHE] Hit! Returning cached response (<10ms)');
-        return cached.response;
-    }
-    return null;
-}
+// ─── Squad classification ─────────────────────────────────────────────────────
+const STRATEGIC_SQUADS = new Set(['board', 'vault', 'oracle', 'nexus']);
+export const requiresDeepReasoning = (squadId: string): boolean =>
+    STRATEGIC_SQUADS.has(squadId.toLowerCase());
 
-function cacheResponse(prompt: string, response: string): void {
-    const key = getCacheKey(prompt);
-    responseCache.set(key, { response, timestamp: Date.now() });
-}
-
-dotenv.config();
-
-import { config } from './config/loader';
-
-console.log("[LLM] Initializing providers...");
-console.log("[LLM] Claude/Anthropic Key Present:", !!config.llm.anthropic_api_key);
-console.log("[LLM] DeepSeek Key Present:", !!config.llm.deepseek_api_key);
-console.log("[LLM] Google Key Present:", !!config.llm.google_api_key);
-console.log("[LLM] Kimi/Moonshot Key Present:", !!config.llm.moonshot_api_key);
-console.log("[LLM] Primary LLM:", config.llm.primary || 'claude');
-
-// Force environment variable reload if not in config
-if (!config.llm.anthropic_api_key) {
-    config.llm.anthropic_api_key = process.env.ANTHROPIC_API_KEY;
-}
-if (!config.llm.deepseek_api_key) {
-    config.llm.deepseek_api_key = process.env.DEEPSEEK_API_KEY;
-}
-if (!config.llm.moonshot_api_key) {
-    config.llm.moonshot_api_key = process.env.MOONSHOT_API_KEY;
-}
-
-// ─── Lazy-load clients ────────────────────────────────────────────────────────
+// ─── Client initialisation ────────────────────────────────────────────────────
+let groqClient: Groq | null = null;
 let claudeClient: Anthropic | null = null;
 let deepseek: OpenAI | null = null;
 let kimi: OpenAI | null = null;
 let genAI: GoogleGenerativeAI | null = null;
+// Ollama uses OpenAI-compatible API — no extra package needed
+let ollamaClient: OpenAI | null = null;
 
 try {
+    // Ollama — always attempt (localhost)
+    ollamaClient = new OpenAI({
+        apiKey: 'ollama', // Ollama ignores the key
+        baseURL: config.llm.ollama_base_url || 'http://localhost:11434/v1',
+    });
+    console.log(`[LLM] 🖥️  Ollama client ready  → ${config.llm.ollama_base_url}/v1  (model: ${config.llm.ollama_model})`);
+
+    // Groq — free API
+    if (config.llm.groq_api_key) {
+        groqClient = new Groq({ apiKey: config.llm.groq_api_key });
+        console.log(`[LLM] ⚡ Groq client ready    → model: ${config.llm.groq_model}  (FREE)`);
+    } else {
+        console.warn('[LLM] ⚠️  GROQ_API_KEY not set — get one FREE at https://console.groq.com/');
+    }
+
+    // Claude — paid, strategic / fallback
     if (config.llm.anthropic_api_key) {
         claudeClient = new Anthropic({ apiKey: config.llm.anthropic_api_key });
-        console.log("[LLM] ✅ Claude (Anthropic) client initialized — PRIMARY");
-    } else {
-        console.warn("[LLM] ⚠️  No ANTHROPIC_API_KEY found. Claude will be unavailable.");
+        console.log(`[LLM] 🧠 Claude client ready  → model: ${config.llm.anthropic_model}`);
     }
 
+    // DeepSeek — cheap fallback
     if (config.llm.deepseek_api_key) {
-        deepseek = new OpenAI({
-            apiKey: config.llm.deepseek_api_key,
-            baseURL: 'https://api.deepseek.com',
-        });
-        console.log("[LLM] ✅ DeepSeek client initialized — FALLBACK #1");
+        deepseek = new OpenAI({ apiKey: config.llm.deepseek_api_key, baseURL: 'https://api.deepseek.com' });
+        console.log(`[LLM] 🔵 DeepSeek ready       → fallback`);
     }
 
+    // Kimi — last resort
     if (config.llm.moonshot_api_key) {
-        kimi = new OpenAI({
-            apiKey: config.llm.moonshot_api_key,
-            baseURL: 'https://api.moonshot.ai/v1',
-        });
-        console.log("[LLM] ✅ Kimi/Moonshot client initialized — FALLBACK #2");
+        kimi = new OpenAI({ apiKey: config.llm.moonshot_api_key, baseURL: 'https://api.moonshot.ai/v1' });
+        console.log(`[LLM] 🟡 Kimi ready           → last-resort fallback`);
     }
 
+    // Gemini — vision only
     if (config.llm.google_api_key) {
         genAI = new GoogleGenerativeAI(config.llm.google_api_key);
-        console.log("[LLM] ✅ Google Gemini initialized — Vision only");
+        console.log(`[LLM] 👁️  Gemini ready         → vision tasks`);
     }
-
 } catch (err: any) {
-    console.warn("[LLM] Warning: One or more LLM clients failed to initialize:", err.message);
+    console.warn('[LLM] Client init warning:', err.message);
 }
 
-// ─── Squad routing helpers ─────────────────────────────────────────────────────
-export const requiresDeepReasoning = (squadId: string): boolean => {
-    const strategicSquads = ['board', 'vault', 'oracle', 'nexus'];
-    return strategicSquads.includes(squadId.toLowerCase());
-};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Individual provider helpers
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// Model selection based on task type
-const getClaudeModel = (squadId: string): string => {
-    // Use override from config if set, otherwise pick by squad type
-    if (config.llm.anthropic_model) return config.llm.anthropic_model;
-    return requiresDeepReasoning(squadId)
-        ? 'claude-opus-4-5'             // deep reasoning / strategic
-        : 'claude-3-5-sonnet-20241022'; // default high-quality
-};
-
-const getDeepSeekModel = (squadId: string): string =>
-    requiresDeepReasoning(squadId) ? 'deepseek-reasoner' : 'deepseek-chat';
-
-// ─── PRIMARY: Claude (non-streaming) ──────────────────────────────────────────
-const queryClaude = async (
+/** Ollama — local, completely FREE */
+const queryOllama = async (
     systemPrompt: string,
     userPrompt: string,
-    squadId: string,
-    maxTokens: number = 4096
+    squadId: string
 ): Promise<string | null> => {
-    if (!claudeClient) return null;
-
-    const model = getClaudeModel(squadId);
+    if (!ollamaClient) return null;
+    const model = config.llm.ollama_model || 'llama3.2';
     try {
-        console.log(`[LLM-CLAUDE] Querying ${model}...`);
-        const startTime = Date.now();
-
-        const completion = await claudeClient.messages.create({
+        const t0 = Date.now();
+        const completion = await ollamaClient.chat.completions.create({
             model,
-            max_tokens: maxTokens,
-            system: systemPrompt,
-            messages: [{ role: 'user', content: userPrompt }],
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            // Short timeout so we don't stall if Ollama isn't running
         });
-
-        const usage = completion.usage;
-        const pricing = requiresDeepReasoning(squadId) ? PRICING.claude_sonnet : PRICING.claude_sonnet;
-        const callCost = (usage.input_tokens / 1_000_000 * pricing.prompt) +
-            (usage.output_tokens / 1_000_000 * pricing.completion);
-        TokenMetrics.promptTokens += usage.input_tokens;
-        TokenMetrics.completionTokens += usage.output_tokens;
-        TokenMetrics.costUsd += callCost;
-        recordCall(callCost);
-
-        const response = (completion.content[0] as any)?.text || '';
-        const latency = Date.now() - startTime;
-        console.log(`[LLM-CLAUDE] ✓ Response in ${latency}ms (${usage.output_tokens} tokens)`);
-        return response;
+        const text = completion.choices[0]?.message?.content || '';
+        if (!text) return null;
+        console.log(`[LLM-OLLAMA] ✓ ${model} replied in ${Date.now() - t0}ms (FREE)`);
+        return text;
     } catch (err: any) {
-        console.warn(`[LLM-CLAUDE] Failed: ${err.message}`);
+        // Ollama not running is expected — silently fall through
+        if (err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED')) {
+            // Don't spam logs — Ollama simply not running
+        } else {
+            console.warn(`[LLM-OLLAMA] ${err.message}`);
+        }
         return null;
     }
 };
 
-// ─── FALLBACK #1: DeepSeek (non-streaming) ────────────────────────────────────
+/** Ollama streaming */
+const queryOllamaStream = async (
+    systemPrompt: string,
+    userPrompt: string,
+    onChunk: (c: string) => void
+): Promise<string | null> => {
+    if (!ollamaClient) return null;
+    const model = config.llm.ollama_model || 'llama3.2';
+    try {
+        const stream = await ollamaClient.chat.completions.create({
+            model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            stream: true,
+        });
+        let full = '';
+        for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta?.content || '';
+            if (delta) { full += delta; onChunk(delta); }
+        }
+        if (!full) return null;
+        console.log(`[LLM-OLLAMA-STREAM] ✓ ${model} streamed ${full.length} chars (FREE)`);
+        return full;
+    } catch (err: any) {
+        if (!err.message?.includes('ECONNREFUSED')) console.warn(`[LLM-OLLAMA-STREAM] ${err.message}`);
+        return null;
+    }
+};
+
+/** Groq — free API, Llama 3.3 70B */
+const queryGroq = async (
+    systemPrompt: string,
+    userPrompt: string,
+    squadId: string
+): Promise<string | null> => {
+    if (!groqClient) return null;
+    const model = config.llm.groq_model || 'llama-3.3-70b-versatile';
+    try {
+        const t0 = Date.now();
+        const completion = await groqClient.chat.completions.create({
+            model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 4096,
+        });
+        const text = completion.choices[0]?.message?.content || '';
+        if (!text) return null;
+        const usage = completion.usage;
+        if (usage) {
+            TokenMetrics.promptTokens += usage.prompt_tokens;
+            TokenMetrics.completionTokens += usage.completion_tokens;
+            // Groq free tier = $0
+        }
+        recordCall(0);
+        console.log(`[LLM-GROQ] ✓ ${model} replied in ${Date.now() - t0}ms (FREE)`);
+        return text;
+    } catch (err: any) {
+        console.warn(`[LLM-GROQ] ${err.message}`);
+        return null;
+    }
+};
+
+/** Groq streaming */
+const queryGroqStream = async (
+    systemPrompt: string,
+    userPrompt: string,
+    onChunk: (c: string) => void,
+    squadId: string
+): Promise<string | null> => {
+    if (!groqClient) return null;
+    const model = config.llm.groq_model || 'llama-3.3-70b-versatile';
+    try {
+        const stream = await groqClient.chat.completions.create({
+            model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 4096,
+            stream: true,
+        });
+        let full = '';
+        for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta?.content || '';
+            if (delta) { full += delta; onChunk(delta); }
+        }
+        if (!full) return null;
+        recordCall(0);
+        console.log(`[LLM-GROQ-STREAM] ✓ ${model} streamed ${full.length} chars (FREE)`);
+        return full;
+    } catch (err: any) {
+        console.warn(`[LLM-GROQ-STREAM] ${err.message}`);
+        return null;
+    }
+};
+
+/** Claude — paid, used for strategic squads + fallback */
+const queryClaude = async (
+    systemPrompt: string,
+    userPrompt: string,
+    squadId: string
+): Promise<string | null> => {
+    if (!claudeClient) return null;
+    const strategic = requiresDeepReasoning(squadId);
+    // Haiku for fallback on simple tasks, Sonnet for strategic
+    const model = strategic
+        ? (process.env.ANTHROPIC_MODEL_STRATEGIC || 'claude-3-5-sonnet-20241022')
+        : (config.llm.anthropic_model || 'claude-3-5-haiku-20241022');
+    const pricing = strategic ? PRICING.claude_sonnet : PRICING.claude_haiku;
+
+    try {
+        const t0 = Date.now();
+        const completion = await claudeClient.messages.create({
+            model,
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+        });
+        const text = (completion.content[0] as any)?.text || '';
+        if (!text) return null;
+        const u = completion.usage;
+        const cost = (u.input_tokens / 1e6 * pricing.prompt) + (u.output_tokens / 1e6 * pricing.completion);
+        TokenMetrics.promptTokens += u.input_tokens;
+        TokenMetrics.completionTokens += u.output_tokens;
+        TokenMetrics.costUsd += cost;
+        recordCall(cost);
+        console.log(`[LLM-CLAUDE] ✓ ${model} replied in ${Date.now() - t0}ms ($${cost.toFixed(5)})`);
+        return text;
+    } catch (err: any) {
+        console.warn(`[LLM-CLAUDE] ${err.message}`);
+        return null;
+    }
+};
+
+/** Claude streaming */
+const queryClaudeStream = async (
+    systemPrompt: string,
+    userPrompt: string,
+    onChunk: (c: string) => void,
+    squadId: string
+): Promise<string | null> => {
+    if (!claudeClient) return null;
+    const strategic = requiresDeepReasoning(squadId);
+    const model = strategic
+        ? (process.env.ANTHROPIC_MODEL_STRATEGIC || 'claude-3-5-sonnet-20241022')
+        : (config.llm.anthropic_model || 'claude-3-5-haiku-20241022');
+    const pricing = strategic ? PRICING.claude_sonnet : PRICING.claude_haiku;
+    try {
+        let full = '';
+        const stream = claudeClient.messages.stream({
+            model, max_tokens: 4096, system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+        });
+        for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                full += event.delta.text; onChunk(event.delta.text);
+            }
+        }
+        if (!full) return null;
+        const fm = await stream.finalMessage();
+        const u = fm.usage;
+        const cost = (u.input_tokens / 1e6 * pricing.prompt) + (u.output_tokens / 1e6 * pricing.completion);
+        TokenMetrics.promptTokens += u.input_tokens;
+        TokenMetrics.completionTokens += u.output_tokens;
+        TokenMetrics.costUsd += cost;
+        recordCall(cost);
+        return full;
+    } catch (err: any) {
+        console.warn(`[LLM-CLAUDE-STREAM] ${err.message}`);
+        return null;
+    }
+};
+
+/** DeepSeek — cheap fallback */
 const queryDeepSeek = async (
     systemPrompt: string,
     userPrompt: string,
     squadId: string
 ): Promise<string | null> => {
-    if (!deepseek || !config.llm.deepseek_api_key) return null;
-
-    const activeModel = getDeepSeekModel(squadId);
+    if (!deepseek) return null;
+    const model = requiresDeepReasoning(squadId) ? 'deepseek-reasoner' : 'deepseek-chat';
     try {
-        console.log(`[LLM-DEEPSEEK] Querying ${activeModel}...`);
         const completion = await deepseek.chat.completions.create({
+            model, max_tokens: 4096,
             messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt }
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
             ],
-            model: activeModel,
-            max_tokens: 4096,
         });
-        const usage = completion.usage;
-        if (usage) {
-            const callCost = (usage.prompt_tokens / 1_000_000 * PRICING.deepseek.prompt) +
-                (usage.completion_tokens / 1_000_000 * PRICING.deepseek.completion);
-            TokenMetrics.promptTokens += usage.prompt_tokens;
-            TokenMetrics.completionTokens += usage.completion_tokens;
-            TokenMetrics.costUsd += callCost;
-            recordCall(callCost);
+        const text = completion.choices[0]?.message?.content || '';
+        if (!text) return null;
+        const u = completion.usage;
+        if (u) {
+            const cost = (u.prompt_tokens / 1e6 * PRICING.deepseek.prompt) + (u.completion_tokens / 1e6 * PRICING.deepseek.completion);
+            TokenMetrics.promptTokens += u.prompt_tokens;
+            TokenMetrics.completionTokens += u.completion_tokens;
+            TokenMetrics.costUsd += cost;
+            recordCall(cost);
         }
-        return completion.choices[0].message.content || "";
+        console.log(`[LLM-DEEPSEEK] ✓ ${model}`);
+        return text;
     } catch (err: any) {
-        console.warn(`[LLM-DEEPSEEK] Failed: ${err.message}`);
+        console.warn(`[LLM-DEEPSEEK] ${err.message}`);
         return null;
     }
 };
 
-// ─── FALLBACK #2: Kimi/Moonshot (non-streaming) ───────────────────────────────
-const queryKimi = async (
-    systemPrompt: string,
-    userPrompt: string
-): Promise<string | null> => {
-    if (!kimi || !config.llm.moonshot_api_key) return null;
-
+/** Kimi — last resort */
+const queryKimi = async (systemPrompt: string, userPrompt: string): Promise<string | null> => {
+    if (!kimi) return null;
     try {
-        console.log(`[LLM-KIMI] Querying moonshot-v1-8k...`);
         const completion = await kimi.chat.completions.create({
+            model: 'moonshot-v1-8k',
             messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt }
+                { role: 'system', content: systemPrompt.slice(0, 3000) }, // respect 8k limit
+                { role: 'user', content: userPrompt.slice(0, 4000) },
             ],
-            model: "moonshot-v1-8k",
         });
-        const usage = completion.usage;
-        if (usage) {
-            const callCost = (usage.prompt_tokens / 1_000_000 * PRICING.moonshot.prompt) +
-                (usage.completion_tokens / 1_000_000 * PRICING.moonshot.completion);
-            TokenMetrics.promptTokens += usage.prompt_tokens;
-            TokenMetrics.completionTokens += usage.completion_tokens;
-            TokenMetrics.costUsd += callCost;
-            recordCall(callCost);
+        const text = completion.choices[0]?.message?.content || '';
+        if (!text) return null;
+        const u = completion.usage;
+        if (u) {
+            const cost = (u.prompt_tokens / 1e6 * PRICING.moonshot.prompt) + (u.completion_tokens / 1e6 * PRICING.moonshot.completion);
+            TokenMetrics.promptTokens += u.prompt_tokens;
+            TokenMetrics.completionTokens += u.completion_tokens;
+            TokenMetrics.costUsd += cost;
+            recordCall(cost);
         }
-        return completion.choices[0].message.content || "";
+        console.log(`[LLM-KIMI] ✓ moonshot-v1-8k`);
+        return text;
     } catch (err: any) {
-        console.warn(`[LLM-KIMI] Failed: ${err.message}`);
+        console.warn(`[LLM-KIMI] ${err.message}`);
         return null;
     }
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Public API
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Standard (non-streaming) LLM query.
- * Order: Cache → Claude (PRIMARY) → DeepSeek (Fallback #1) → Kimi (Fallback #2)
+ * queryLLM — standard (non-streaming) call
+ *
+ * Regular squads:   Cache → Ollama (FREE) → Groq (FREE) → Claude Haiku → DeepSeek → Kimi
+ * Strategic squads: Cache → Groq (FREE)   → Claude Sonnet → DeepSeek  → Kimi
  */
 export const queryLLM = async (
     systemPrompt: string,
     userPrompt: string,
     squadId: string = 'forge'
 ): Promise<string> => {
-    // ── Rate Limiter ──────────────────────────────────────────────────────────
-    const rateLimitError = checkRateLimit();
-    if (rateLimitError) {
-        console.warn(`[LLM] Rate limited: ${rateLimitError}`);
-        return rateLimitError;
+    const rateErr = checkRateLimit();
+    if (rateErr) { console.warn('[LLM] Rate limited:', rateErr); return rateErr; }
+
+    const ck = cacheKey(systemPrompt + '\n' + userPrompt);
+    const hit = fromCache(ck);
+    if (hit) { console.log('[LLM-CACHE] Hit!'); return hit; }
+
+    const strategic = requiresDeepReasoning(squadId);
+
+    if (!strategic) {
+        // T2 — Ollama (local, free)
+        const r = await queryOllama(systemPrompt, userPrompt, squadId);
+        if (r) { toCache(ck, r); return r; }
     }
 
-    // ── TIER 1: CACHE (<10ms) ─────────────────────────────────────────────────
-    const cached = getCachedResponse(systemPrompt + '\n' + userPrompt);
-    if (cached) return cached;
+    // T3 — Groq (free API)
+    const groqR = await queryGroq(systemPrompt, userPrompt, squadId);
+    if (groqR) { toCache(ck, groqR); return groqR; }
 
-    // ── TIER 2: CLAUDE — PRIMARY ──────────────────────────────────────────────
-    const claudeResponse = await queryClaude(systemPrompt, userPrompt, squadId);
-    if (claudeResponse) {
-        cacheResponse(systemPrompt + '\n' + userPrompt, claudeResponse);
-        return claudeResponse;
-    }
+    // T4 — Claude (paid — Haiku for simple, Sonnet for strategic)
+    const claudeR = await queryClaude(systemPrompt, userPrompt, squadId);
+    if (claudeR) { toCache(ck, claudeR); return claudeR; }
 
-    // ── TIER 3: DEEPSEEK — FALLBACK #1 ───────────────────────────────────────
-    const deepSeekResponse = await queryDeepSeek(systemPrompt, userPrompt, squadId);
-    if (deepSeekResponse) {
-        cacheResponse(systemPrompt + '\n' + userPrompt, deepSeekResponse);
-        return deepSeekResponse;
-    }
+    // T5 — DeepSeek
+    const dsR = await queryDeepSeek(systemPrompt, userPrompt, squadId);
+    if (dsR) { toCache(ck, dsR); return dsR; }
 
-    // ── TIER 4: KIMI — FALLBACK #2 ────────────────────────────────────────────
-    const kimiResponse = await queryKimi(systemPrompt, userPrompt);
-    if (kimiResponse) {
-        cacheResponse(systemPrompt + '\n' + userPrompt, kimiResponse);
-        return kimiResponse;
-    }
+    // T6 — Kimi
+    const kimiR = await queryKimi(systemPrompt, userPrompt);
+    if (kimiR) { toCache(ck, kimiR); return kimiR; }
 
-    return "⚠️ Error: All LLM providers unavailable. Check ANTHROPIC_API_KEY in your .env file.";
+    return '⚠️ All LLM providers unavailable. Install Ollama (free) or set GROQ_API_KEY in .env';
 };
 
 /**
- * Streaming LLM query — calls onChunk for each token, returns full response.
- * Order: Cache → Claude streaming (PRIMARY) → DeepSeek streaming (Fallback) → Kimi non-streaming
+ * queryLLMStream — streaming version
+ *
+ * Same routing as queryLLM but with real-time token streaming.
  */
 export const queryLLMStream = async (
     systemPrompt: string,
@@ -292,121 +455,74 @@ export const queryLLMStream = async (
     onChunk: (chunk: string) => void,
     squadId: string = 'forge'
 ): Promise<string> => {
-    // ── Rate Limiter ──────────────────────────────────────────────────────────
-    const rateLimitError = checkRateLimit();
-    if (rateLimitError) {
-        console.warn(`[LLM] Stream rate limited: ${rateLimitError}`);
-        onChunk(rateLimitError);
-        return rateLimitError;
-    }
+    const rateErr = checkRateLimit();
+    if (rateErr) { onChunk(rateErr); return rateErr; }
 
-    // ── TIER 1: CACHE (<10ms) — stream word-by-word for consistent UX ────────
-    const cached = getCachedResponse(systemPrompt + '\n' + userPrompt);
-    if (cached) {
-        console.log('[LLM-CACHE] Hit! Streaming cached response');
-        const words = cached.split(' ');
+    const ck = cacheKey(systemPrompt + '\n' + userPrompt);
+    const hit = fromCache(ck);
+    if (hit) {
+        // Replay cached response word-by-word for consistent UX
+        const words = hit.split(' ');
         for (let i = 0; i < words.length; i++) {
             onChunk((i === 0 ? '' : ' ') + words[i]);
             await new Promise(r => setTimeout(r, 5));
         }
-        return cached;
+        return hit;
     }
 
-    // ── TIER 2: CLAUDE STREAMING — PRIMARY ───────────────────────────────────
-    if (claudeClient) {
-        const model = getClaudeModel(squadId);
-        try {
-            console.log(`[LLM-CLAUDE-STREAM] Streaming ${model}...`);
-            let fullResponse = '';
+    const strategic = requiresDeepReasoning(squadId);
 
-            const stream = claudeClient.messages.stream({
-                model,
-                max_tokens: 4096,
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userPrompt }],
-            });
-
-            for await (const event of stream) {
-                if (
-                    event.type === 'content_block_delta' &&
-                    event.delta.type === 'text_delta'
-                ) {
-                    const text = event.delta.text;
-                    fullResponse += text;
-                    onChunk(text);
-                }
-            }
-
-            const finalMessage = await stream.finalMessage();
-            const usage = finalMessage.usage;
-            const pricing = PRICING.claude_sonnet;
-            const callCost = (usage.input_tokens / 1_000_000 * pricing.prompt) +
-                (usage.output_tokens / 1_000_000 * pricing.completion);
-            TokenMetrics.promptTokens += usage.input_tokens;
-            TokenMetrics.completionTokens += usage.output_tokens;
-            TokenMetrics.costUsd += callCost;
-            recordCall(callCost);
-
-            console.log(`[LLM-CLAUDE-STREAM] ✓ Complete (${fullResponse.length} chars)`);
-            cacheResponse(systemPrompt + '\n' + userPrompt, fullResponse);
-            return fullResponse;
-        } catch (err: any) {
-            console.warn(`[LLM-CLAUDE-STREAM] Failed: ${err.message}. Falling back to DeepSeek.`);
-        }
+    if (!strategic) {
+        // T2 — Ollama streaming
+        const r = await queryOllamaStream(systemPrompt, userPrompt, onChunk);
+        if (r) { toCache(ck, r); return r; }
     }
 
-    // ── TIER 3: DEEPSEEK STREAMING — FALLBACK #1 ─────────────────────────────
+    // T3 — Groq streaming
+    const groqR = await queryGroqStream(systemPrompt, userPrompt, onChunk, squadId);
+    if (groqR) { toCache(ck, groqR); return groqR; }
+
+    // T4 — Claude streaming
+    const claudeR = await queryClaudeStream(systemPrompt, userPrompt, onChunk, squadId);
+    if (claudeR) { toCache(ck, claudeR); return claudeR; }
+
+    // T5 — DeepSeek streaming
     if (deepseek && config.llm.deepseek_api_key) {
-        const activeModel = getDeepSeekModel(squadId);
+        const model = requiresDeepReasoning(squadId) ? 'deepseek-reasoner' : 'deepseek-chat';
         try {
-            console.log(`[LLM-DEEPSEEK-STREAM] Streaming ${activeModel}...`);
-            let fullResponse = '';
-
+            let full = '';
             const stream = await deepseek.chat.completions.create({
+                model, stream: true, max_tokens: 4096,
                 messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt }
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
                 ],
-                model: activeModel,
-                stream: true,
-                max_tokens: 4096,
             });
-
             for await (const chunk of stream) {
-                const reasoningDelta = (chunk.choices[0]?.delta as any)?.reasoning_content || '';
-                const baseDelta = chunk.choices[0]?.delta?.content || '';
-
-                if (reasoningDelta) onChunk(`[THINKING] ${reasoningDelta}`);
-                if (baseDelta) {
-                    fullResponse += baseDelta;
-                    onChunk(baseDelta);
-                }
+                const delta = chunk.choices[0]?.delta?.content || '';
+                if (delta) { full += delta; onChunk(delta); }
             }
-
-            const estimatedPrompt = Math.ceil((systemPrompt.length + userPrompt.length) / 3.5);
-            const estimatedCompletion = Math.ceil(fullResponse.length / 3.5);
-            const streamCost = (estimatedPrompt / 1_000_000 * PRICING.deepseek.prompt) +
-                (estimatedCompletion / 1_000_000 * PRICING.deepseek.completion);
-            TokenMetrics.promptTokens += estimatedPrompt;
-            TokenMetrics.completionTokens += estimatedCompletion;
-            TokenMetrics.costUsd += streamCost;
-            recordCall(streamCost);
-
-            cacheResponse(systemPrompt + '\n' + userPrompt, fullResponse);
-            return fullResponse;
+            if (full) { toCache(ck, full); return full; }
         } catch (err: any) {
-            console.warn(`[LLM-DEEPSEEK-STREAM] Failed: ${err.message}. Falling back to Kimi.`);
+            console.warn(`[LLM-DEEPSEEK-STREAM] ${err.message}`);
         }
     }
 
-    // ── TIER 4: KIMI non-streaming — FALLBACK #2, simulate stream ────────────
-    const text = await queryLLM(systemPrompt, userPrompt, squadId);
-    const words = text.split(' ');
-    for (let i = 0; i < words.length; i++) {
-        onChunk((i === 0 ? '' : ' ') + words[i]);
-        await new Promise(r => setTimeout(r, 20));
+    // T6 — Kimi (simulate stream)
+    const kimiR = await queryKimi(systemPrompt, userPrompt);
+    if (kimiR) {
+        const words = kimiR.split(' ');
+        for (let i = 0; i < words.length; i++) {
+            onChunk((i === 0 ? '' : ' ') + words[i]);
+            await new Promise(r => setTimeout(r, 20));
+        }
+        toCache(ck, kimiR);
+        return kimiR;
     }
-    return text;
+
+    const err = '⚠️ All LLM providers unavailable. Install Ollama (free) or set GROQ_API_KEY in .env';
+    onChunk(err);
+    return err;
 };
 
 // ─── Audio Transcription (Whisper via OpenAI) ─────────────────────────────────
@@ -415,82 +531,60 @@ import * as path from 'path';
 import * as os from 'os';
 
 export const transcribeAudio = async (audioBuffer: Buffer, mimetype: string): Promise<string> => {
-    if (!config.llm.openai_api_key) {
-        throw new Error("OPENAI_API_KEY is not configured for Whisper transcription.");
-    }
+    if (!config.llm.openai_api_key) throw new Error('OPENAI_API_KEY not configured for Whisper.');
     const openai = new OpenAI({ apiKey: config.llm.openai_api_key });
-
     let ext = 'ogg';
     if (mimetype.includes('mp4')) ext = 'mp4';
     if (mimetype.includes('mpeg')) ext = 'mp3';
     if (mimetype.includes('wav')) ext = 'wav';
-
-    const tempFilePath = path.join(os.tmpdir(), `whatsapp_audio_${Date.now()}.${ext}`);
-    fs.writeFileSync(tempFilePath, audioBuffer);
-
+    const tmp = path.join(os.tmpdir(), `audio_${Date.now()}.${ext}`);
+    fs.writeFileSync(tmp, audioBuffer);
     try {
-        console.log(`[LLM/Whisper] Transcribing audio file: ${tempFilePath}`);
-        const response = await openai.audio.transcriptions.create({
-            file: fs.createReadStream(tempFilePath),
-            model: 'whisper-1',
-        });
-        return response.text;
+        const resp = await openai.audio.transcriptions.create({ file: fs.createReadStream(tmp), model: 'whisper-1' });
+        return resp.text;
     } finally {
-        if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
     }
 };
 
-// ─── Vision LLM — Gemini flash, falls back to Claude text ────────────────────
+// ─── Vision (Gemini → Claude → text fallback) ─────────────────────────────────
 export const queryVisionLLM = async (
     systemPrompt: string,
     userPrompt: string,
     imageBuffer: Buffer
 ): Promise<string> => {
-    // Try Gemini vision first
+    // Gemini vision (free tier)
     if (genAI && config.llm.google_api_key) {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            const imagePart = {
-                inlineData: {
-                    data: imageBuffer.toString("base64"),
-                    mimeType: "image/png",
-                },
-            };
-            const result = await model.generateContent([systemPrompt + "\n" + userPrompt, imagePart]);
+            const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            const result = await model.generateContent([
+                systemPrompt + '\n' + userPrompt,
+                { inlineData: { data: imageBuffer.toString('base64'), mimeType: 'image/png' } },
+            ]);
             return result.response.text();
-        } catch (error: any) {
-            console.warn("[Vision/Gemini] Failed:", error.message, "— falling back to Claude text");
+        } catch (err: any) {
+            console.warn('[Vision/Gemini]', err.message);
         }
     }
-
-    // Fallback: Claude vision (pass image as base64)
+    // Claude vision fallback
     if (claudeClient) {
         try {
             const completion = await claudeClient.messages.create({
-                model: config.llm.anthropic_model || 'claude-3-5-sonnet-20241022',
+                model: config.llm.anthropic_model || 'claude-3-5-haiku-20241022',
                 max_tokens: 1024,
                 system: systemPrompt,
                 messages: [{
                     role: 'user',
                     content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: 'image/png',
-                                data: imageBuffer.toString('base64'),
-                            },
-                        },
-                        { type: 'text', text: userPrompt }
-                    ]
-                }]
+                        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBuffer.toString('base64') } },
+                        { type: 'text', text: userPrompt },
+                    ],
+                }],
             });
             return (completion.content[0] as any)?.text || '';
         } catch (err: any) {
-            console.warn("[Vision/Claude] Failed:", err.message);
+            console.warn('[Vision/Claude]', err.message);
         }
     }
-
-    // Last resort: text-only via queryLLM
-    return await queryLLM(systemPrompt, userPrompt);
+    return queryLLM(systemPrompt, userPrompt);
 };

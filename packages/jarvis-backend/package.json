@@ -41,6 +41,7 @@
         "franc-min": "^6.2.0",
         "front-matter": "^4.0.2",
         "fuse.js": "^7.0.0",
+        "groq-sdk": "^0.9.0",
         "imap-simple": "^5.1.0",
         "ioredis": "^5.9.3",
         "jimp": "^1.6.0",
