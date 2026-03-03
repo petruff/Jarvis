@@ -79,7 +79,7 @@ function App() {
     };
 
     return (
-        <div className="min-h-screen bg-jarvis-bg text-jarvis-text selection:bg-jarvis-primary selection:text-jarvis-surface flex flex-col relative overflow-y-auto font-sans scrollbar-hide">
+        <div className="h-screen w-screen bg-jarvis-bg text-jarvis-text selection:bg-jarvis-primary selection:text-jarvis-surface flex flex-col relative overflow-hidden font-sans">
 
             {/* SQUAD DASHBOARD OVERLAY */}
             {showDashboard && socket && (
@@ -138,18 +138,18 @@ function App() {
                 </p>
             </header>
 
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col items-center justify-center relative z-10 w-full max-w-7xl mx-auto px-4 gap-2 pb-4">
+            {/* Main Content Area */}
+            <main className="flex-1 w-full max-w-7xl mx-auto pointer-events-none relative z-10">
 
                 <ConnectorLines />
 
-                {/* Central Visualizer */}
-                <div className={`my-2 transform transition-all duration-500 relative z-20 ${voiceState === 'LISTENING' ? 'scale-110' : ''}`}>
+                {/* Central Visualizer - Absolute Centered */}
+                <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 transition-all duration-500 z-0 opacity-80 ${voiceState === 'LISTENING' ? 'scale-110' : ''}`}>
                     <JarvisCore isSpeaking={voiceState === 'SPEAKING'} isListening={voiceState === 'LISTENING'} />
                 </div>
 
-                {/* Info Bar / Stats */}
-                <div className="w-full max-w-3xl flex items-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider mb-4 relative z-10" aria-hidden="true">
+                {/* Info Bar / Stats (Fixed above Control Deck) */}
+                <div className="fixed bottom-[max(320px,35vh)] left-1/2 -translate-x-1/2 w-full max-w-3xl flex items-center justify-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider z-20 pointer-events-auto">
                     <div className="w-2 h-2 rounded-full bg-jarvis-primary shadow-glow animate-pulse"></div>
                     <span>SYSTEM NOMINAL — NEURAL CLUSTER ONLINE</span>
                     <div className="flex-1 h-px bg-jarvis-primary/20"></div>
@@ -171,8 +171,8 @@ function App() {
                     <div className="w-2 h-2 rounded-full bg-jarvis-primary/50"></div>
                 </div>
 
-                {/* Control Deck */}
-                <div className="w-full max-w-3xl relative z-20 flex flex-col gap-4">
+                {/* Control Deck (Fixed strictly to bottom center) */}
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl z-20 flex flex-col gap-3 pointer-events-auto px-4">
                     {/* Output Stream Box */}
                     <div className="w-full">
                         <OutputStream transcript={transcript} isScanning={!user} user={user} lastResponse={lastResponse} logs={logs} />
