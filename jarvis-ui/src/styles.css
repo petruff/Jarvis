@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-jarvis-bg text-jarvis-text font-sans overflow-hidden;
+        background-image: radial-gradient(circle at center, #141e30 0%, #0a0f1c 100%);
+    }
+}
+
+/* ===== IRON MAN GLASSMORPHISM ENHANCEMENT ===== */
+
+/* Enhanced glass panels - MORE VISIBLE */
+.glass-panel {
+    background: rgba(10, 15, 28, 0.5) !important;
+    backdrop-filter: blur(15px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(15px) saturate(120%) !important;
+    border: 2px solid rgba(0, 200, 255, 0.6) !important;
+    border-radius: 12px !important;
+    box-shadow:
+        0 0 30px rgba(0, 200, 255, 0.4),
+        0 0 60px rgba(0, 150, 255, 0.2),
+        inset 0 0 30px rgba(0, 200, 255, 0.1) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.glass-panel:hover {
+    box-shadow:
+        0 0 40px rgba(0, 200, 255, 0.6),
+        0 0 80px rgba(0, 150, 255, 0.3),
+        inset 0 0 40px rgba(0, 200, 255, 0.15) !important;
+    border-color: rgba(0, 220, 255, 0.8) !important;
+    transform: translateY(-2px);
+}
+
+/* Holographic text with intense glow */
+.holo-text {
+    color: rgba(0, 243, 255, 0.95);
+    text-shadow:
+        0 0 10px rgba(0, 243, 255, 1),
+        0 0 20px rgba(0, 200, 255, 0.8),
+        0 0 30px rgba(0, 150, 255, 0.6),
+        0 0 40px rgba(0, 100, 255, 0.4);
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* ===== REALISTIC ARC REACTOR ===== */
+.arc-reactor {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+/* Outer ring with rotating glow */
+.arc-reactor::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 3px solid;
+    border-color: rgba(0, 243, 255, 0.8);
+    border-radius: 50%;
+    animation: arc-reactor-spin 8s linear infinite;
+    box-shadow:
+        0 0 20px rgba(0, 243, 255, 0.6),
+        inset 0 0 20px rgba(0, 243, 255, 0.3);
+}
+
+/* Inner glowing core */
+.arc-reactor::after {
+    content: '';
+    position: absolute;
+    width: 50%;
+    height: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(0, 243, 255, 1), rgba(0, 150, 255, 0.5));
+    border-radius: 50%;
+    animation: arc-reactor-pulse 2s ease-in-out infinite;
+    box-shadow:
+        0 0 30px rgba(0, 243, 255, 0.8),
+        0 0 50px rgba(0, 200, 255, 0.5);
+    z-index: 1;
+}
+
+@keyframes arc-reactor-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes arc-reactor-pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow:
+            0 0 30px rgba(0, 243, 255, 0.8),
+            0 0 50px rgba(0, 200, 255, 0.5);
+    }
+    50% {
+        transform: scale(1.2);
+        box-shadow:
+            0 0 50px rgba(0, 243, 255, 1),
+            0 0 80px rgba(0, 200, 255, 0.7);
+    }
+}
+
+/* ===== HOLOGRAM ANIMATIONS ===== */
+@keyframes hologram-flicker {
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+        opacity: 1;
+    }
+    20%, 24%, 55% {
+        opacity: 0.7;
+    }
+}
+
+@keyframes scan-line {
+    0% { top: -100%; }
+    100% { top: 100%; }
+}
+
+/* Apply hologram flicker to main title */
+header h1 {
+    animation: hologram-flicker 0.15s infinite !important;
+}
+
+/* ===== REALISTIC PANELS ===== */
+.w-full.glass-panel,
+.glass-panel.border-2,
+[class*="glass-panel"] {
+    background: rgba(10, 15, 28, 0.5) !important;
+    backdrop-filter: blur(15px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(15px) saturate(120%) !important;
+    border-color: rgba(0, 200, 255, 0.6) !important;
+    box-shadow:
+        0 0 30px rgba(0, 200, 255, 0.4),
+        0 0 60px rgba(0, 150, 255, 0.2),
+        inset 0 0 30px rgba(0, 200, 255, 0.1) !important;
+}
+
+/* ===== SCAN LINE EFFECT ===== */
+.scanline {
+    background: linear-gradient(to bottom,
+            rgba(255, 255, 255, 0),
+            rgba(255, 255, 255, 0) 50%,
+            rgba(0, 243, 255, 0.15) 50%,
+            rgba(0, 243, 255, 0.15));
+    background-size: 100% 4px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 50;
+    opacity: 0.3;
+    animation: scan-line 3s linear infinite;
+}
+
+/* ===== NEON GLOW TEXT ===== */
+.shadow-glow,
+.shadow-glow-sm {
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.7);
+}
+
+.text-jarvis-primary {
+    color: rgb(0, 243, 255);
+    text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+}
+
+/* ===== CLIP PATHS ===== */
+.clip-path-slant {
+    clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.clip-corner {
+    clip-path: polygon(0 0, 100% 0, 100% 70%, 90% 100%, 0 100%);
+}
+
+/* ===== BUTTONS WITH GLOW ===== */
+button {
+    transition: all 0.3s ease;
+}
+
+button:hover {
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.6);
+}
+
+/* ===== DATA STREAM STYLING ===== */
+.data-stream {
+    position: relative;
+    animation: data-flow 2s ease-in-out infinite;
+}
+
+@keyframes data-flow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}

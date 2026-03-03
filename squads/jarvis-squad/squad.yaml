@@ -1,0 +1,35 @@
+name: jarvis-squad
+version: 1.0.0
+description: The Executive Squad for high-level orchestration, strategy, and sales.
+author: Electron AAOS Electron AAOS User
+license: MIT
+slashPrefix: jarvis
+
+electron-aaos:
+  minVersion: "2.1.0"
+  type: squad
+
+components:
+  agents:
+    - jarvis.md
+    - mega-brain.md
+    - gestores.md
+    - sales.md
+  tasks: []
+  workflows: []
+  checklists: []
+  templates: []
+  tools: []
+  scripts: []
+
+config:
+  extends: extend
+  coding-standards: config/coding-standards.md
+  tech-stack: config/tech-stack.md
+  source-tree: config/source-tree.md
+
+tags:
+  - executive
+  - orchestration
+  - sales
+  - strategy

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://geminicli.com/schemas/hooks.json",
+  "SessionStart": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "name": "electron-aaos-session-init",
+          "type": "command",
+          "command": "node ${EXTENSION_DIR}/../../../.electron-aaos-core/hooks/gemini/session-start.js",
+          "timeout": 5000
+        }
+      ]
+    }
+  ],
+  "BeforeAgent": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "name": "electron-aaos-context-inject",
+          "type": "command",
+          "command": "node ${EXTENSION_DIR}/../../../.electron-aaos-core/hooks/gemini/before-agent.js",
+          "timeout": 3000
+        }
+      ]
+    }
+  ],
+  "BeforeTool": [
+    {
+      "matcher": "write_file|replace|shell|bash|execute",
+      "hooks": [
+        {
+          "name": "electron-aaos-security-check",
+          "type": "command",
+          "command": "node ${EXTENSION_DIR}/../../../.electron-aaos-core/hooks/gemini/before-tool.js",
+          "timeout": 2000
+        }
+      ]
+    }
+  ],
+  "AfterTool": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "name": "electron-aaos-audit-log",
+          "type": "command",
+          "command": "node ${EXTENSION_DIR}/../../../.electron-aaos-core/hooks/gemini/after-tool.js",
+          "timeout": 2000
+        }
+      ]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "name": "electron-aaos-session-persist",
+          "type": "command",
+          "command": "node ${EXTENSION_DIR}/../../../.electron-aaos-core/hooks/gemini/session-end.js",
+          "timeout": 5000
+        }
+      ]
+    }
+  ]
+}

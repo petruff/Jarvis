@@ -1,0 +1,8 @@
+{
+  "name": "JARVIS Architecture Diagrams",
+  "id": "jarvis-arch-diagrams-v1",
+  "api": "1.0.0",
+  "main": "jarvis-diagrams.js",
+  "editorType": ["figma", "figjam"],
+  "documentAccess": "dynamic-page"
+}

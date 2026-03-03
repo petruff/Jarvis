@@ -1,0 +1,619 @@
+/**
+ * Pro Command Module
+ *
+ * CLI commands for Electron AAOS Pro license management and feature gating.
+ *
+ * Subcommands:
+ *   electron-aaos pro activate --key <KEY>    Activate a license key
+ *   electron-aaos pro status                   Show license status
+ *   electron-aaos pro deactivate               Deactivate the current license
+ *   electron-aaos pro features                 List all pro features
+ *   electron-aaos pro validate                 Force online revalidation
+ *   electron-aaos pro setup                    Configure GitHub Packages access (AC-12)
+ *
+ * @module cli/commands/pro
+ * @version 1.1.0
+ * @story PRO-6 — License Key & Feature Gating System
+ */
+
+'use strict';
+
+const { Command } = require('commander');
+const path = require('path');
+const fs = require('fs');
+const readline = require('readline');
+
+// Resolve license modules (relative from .electron-aaos-core/cli/commands/pro/)
+const licensePath = path.resolve(__dirname, '..', '..', '..', '..', 'pro', 'license');
+
+/**
+ * Lazy-load license modules (avoids failing if pro module not installed)
+ */
+function loadLicenseModules() {
+  try {
+    const { featureGate } = require(path.join(licensePath, 'feature-gate'));
+    const { licenseApi } = require(path.join(licensePath, 'license-api'));
+    const {
+      writeLicenseCache,
+      readLicenseCache,
+      deleteLicenseCache,
+      hasPendingDeactivation,
+      setPendingDeactivation,
+      clearPendingDeactivation,
+    } = require(path.join(licensePath, 'license-cache'));
+    const {
+      generateMachineId,
+      maskKey,
+      validateKeyFormat,
+    } = require(path.join(licensePath, 'license-crypto'));
+    const { ProFeatureError, LicenseActivationError } = require(path.join(licensePath, 'errors'));
+
+    return {
+      featureGate,
+      licenseApi,
+      writeLicenseCache,
+      readLicenseCache,
+      deleteLicenseCache,
+      hasPendingDeactivation,
+      setPendingDeactivation,
+      clearPendingDeactivation,
+      generateMachineId,
+      maskKey,
+      validateKeyFormat,
+      ProFeatureError,
+      LicenseActivationError,
+    };
+  } catch (error) {
+    console.error('Electron AAOS Pro license module not available.');
+    console.error('Install Electron AAOS Pro: npm install @electron-aaos-fullstack/pro');
+    process.exit(1);
+  }
+}
+
+/**
+ * Get Electron AAOS Core version from package.json
+ */
+function getAiosCoreVersion() {
+  try {
+    const pkgPath = path.resolve(__dirname, '..', '..', '..', '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    return pkg.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Format date for display
+ */
+function formatDate(dateStr) {
+  if (!dateStr) return 'N/A';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/**
+ * Ask user for confirmation
+ */
+async function confirm(question) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// electron-aaos pro activate
+// ---------------------------------------------------------------------------
+
+async function activateAction(options) {
+  const {
+    licenseApi,
+    writeLicenseCache,
+    generateMachineId,
+    maskKey,
+    validateKeyFormat,
+    featureGate,
+    LicenseActivationError,
+  } = loadLicenseModules();
+
+  const key = options.key;
+
+  if (!key) {
+    console.error('Error: License key is required');
+    console.error('Usage: electron-aaos pro activate --key PRO-XXXX-XXXX-XXXX-XXXX');
+    process.exit(1);
+  }
+
+  // Validate key format
+  if (!validateKeyFormat(key)) {
+    console.error('Error: Invalid license key format');
+    console.error('Expected format: PRO-XXXX-XXXX-XXXX-XXXX');
+    process.exit(1);
+  }
+
+  console.log('\nActivating Electron AAOS Pro license...');
+  console.log(`Key: ${maskKey(key)}`);
+  console.log('');
+
+  try {
+    const machineId = generateMachineId();
+    const electron-aaosCoreVersion = getAiosCoreVersion();
+
+    const result = await licenseApi.activate(key, machineId, electron-aaosCoreVersion);
+
+    // Write encrypted cache
+    const cacheData = {
+      key: result.key,
+      activatedAt: result.activatedAt,
+      expiresAt: result.expiresAt,
+      features: result.features,
+      seats: result.seats,
+      cacheValidDays: result.cacheValidDays,
+      gracePeriodDays: result.gracePeriodDays,
+    };
+
+    const writeResult = writeLicenseCache(cacheData);
+    if (!writeResult.success) {
+      console.error(`Warning: Could not save license cache: ${writeResult.error}`);
+    }
+
+    // Reload feature gate
+    featureGate.reload();
+
+    // Display success
+    console.log('License activated successfully!\n');
+    console.log('  Status:       Active');
+    console.log(`  Key:          ${maskKey(result.key)}`);
+    console.log(`  Features:     ${result.features.join(', ')}`);
+    console.log(`  Seats:        ${result.seats.used}/${result.seats.max} used`);
+    console.log(`  Valid until:  ${formatDate(result.expiresAt)}`);
+    console.log(`  Cache:        ${result.cacheValidDays} days offline operation`);
+    console.log('');
+
+  } catch (error) {
+    if (error instanceof LicenseActivationError) {
+      console.error(`\nActivation failed: ${error.message}`);
+      console.error(`Error code: ${error.code}`);
+      if (error.details && Object.keys(error.details).length > 0) {
+        console.error('Details:', JSON.stringify(error.details, null, 2));
+      }
+    } else {
+      console.error(`\nActivation failed: ${error.message}`);
+    }
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// electron-aaos pro status
+// ---------------------------------------------------------------------------
+
+function statusAction() {
+  const {
+    featureGate,
+    readLicenseCache,
+    maskKey,
+    hasPendingDeactivation,
+  } = loadLicenseModules();
+
+  console.log('\nElectron AAOS Pro License Status\n');
+
+  const cache = readLicenseCache();
+  const state = featureGate.getLicenseState();
+  const info = featureGate.getLicenseInfo();
+
+  // State display
+  const stateEmoji = {
+    'Active': '\u2705',     // Green check
+    'Grace': '\u26A0\uFE0F', // Warning
+    'Expired': '\u274C',    // Red X
+    'Not Activated': '\u2796', // Minus
+  };
+
+  console.log(`  License:       ${stateEmoji[state] || ''} ${state}`);
+
+  if (!cache) {
+    console.log('\n  No license activated.');
+    console.log('  Activate: electron-aaos pro activate --key PRO-XXXX-XXXX-XXXX-XXXX');
+    console.log('  Purchase: https://electron-aaos.ai/pro');
+    console.log('');
+    return;
+  }
+
+  // Key (masked)
+  console.log(`  Key:           ${maskKey(cache.key)}`);
+
+  // Features
+  if (info && info.features) {
+    console.log(`  Features:      ${info.features.join(', ')}`);
+  }
+
+  // Seats
+  if (cache.seats) {
+    console.log(`  Seats:         ${cache.seats.used}/${cache.seats.max} used`);
+  }
+
+  // Cache validity
+  if (cache.activatedAt) {
+    const activatedDate = new Date(cache.activatedAt);
+    const cacheValidDays = cache.cacheValidDays || 30;
+    const expiryDate = new Date(activatedDate.getTime() + cacheValidDays * 24 * 60 * 60 * 1000);
+    const daysRemaining = Math.ceil((expiryDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+
+    if (daysRemaining > 0) {
+      console.log(`  Cache:         Valid until ${formatDate(expiryDate)} (${daysRemaining} days remaining)`);
+    } else {
+      console.log(`  Cache:         Expired ${formatDate(expiryDate)}`);
+    }
+  }
+
+  // Grace period warning
+  if (info && info.inGrace) {
+    const gracePeriodDays = cache.gracePeriodDays || 7;
+    console.log(`\n  \u26A0\uFE0F  Grace Period Active (${gracePeriodDays} days)`);
+    console.log('  Please revalidate your license: electron-aaos pro validate');
+  }
+
+  // Pending deactivation warning
+  const pending = hasPendingDeactivation();
+  if (pending && pending.pending) {
+    console.log('\n  \u26A0\uFE0F  Pending Offline Deactivation');
+    console.log('  A deactivation is pending sync to the server.');
+    console.log('  This will be synced on next online activation or validation.');
+  }
+
+  // Next validation
+  console.log(`\n  Next validation: ${state === 'Active' ? 'Background (when online)' : 'Required'}`);
+  console.log('');
+}
+
+// ---------------------------------------------------------------------------
+// electron-aaos pro deactivate
+// ---------------------------------------------------------------------------
+
+async function deactivateAction(options) {
+  const {
+    licenseApi,
+    readLicenseCache,
+    deleteLicenseCache,
+    setPendingDeactivation,
+    generateMachineId,
+    maskKey,
+    featureGate,
+  } = loadLicenseModules();
+
+  const cache = readLicenseCache();
+
+  if (!cache) {
+    console.log('\nNo license is currently activated.');
+    return;
+  }
+
+  // Confirm unless forced
+  if (!options.force) {
+    console.log('\nDeactivating Electron AAOS Pro License');
+    console.log(`Key: ${maskKey(cache.key)}`);
+    console.log('\nThis will:');
+    console.log('  - Remove the license from this machine');
+    console.log('  - Free up a seat for use on another machine');
+    console.log('  - Disable all Pro features (Core features remain available)');
+    console.log('  - Preserve all your data and configurations');
+    console.log('');
+
+    const confirmed = await confirm('Are you sure you want to deactivate? (y/N): ');
+    if (!confirmed) {
+      console.log('Deactivation cancelled.');
+      return;
+    }
+  }
+
+  console.log('\nDeactivating license...');
+
+  try {
+    const machineId = generateMachineId();
+
+    // Try online deactivation first
+    const isOnline = await licenseApi.isOnline();
+
+    if (isOnline) {
+      try {
+        await licenseApi.deactivate(cache.key, machineId);
+        console.log('');
+        console.log('License deactivated successfully.');
+        console.log('Seat has been freed for use on another machine.');
+      } catch (error) {
+        // Online deactivation failed, fall back to offline
+        console.log(`\n\u26A0\uFE0F  Could not reach server: ${error.message}`);
+        console.log('Proceeding with offline deactivation...');
+        setPendingDeactivation(cache.key);
+        console.log('\nSeat will be freed when you next connect online.');
+      }
+    } else {
+      // Offline deactivation
+      console.log('\n\u26A0\uFE0F  No internet connection detected.');
+      console.log('Performing offline deactivation...');
+      setPendingDeactivation(cache.key);
+      console.log('\nSeat will be freed on next online connection.');
+    }
+
+    // Delete local cache
+    deleteLicenseCache();
+
+    // Reload feature gate
+    featureGate.reload();
+
+    console.log('');
+    console.log('Your data and configurations have been preserved.');
+    console.log('Core features remain available.');
+    console.log('');
+    console.log('To reactivate: electron-aaos pro activate --key <KEY>');
+    console.log('');
+
+  } catch (error) {
+    console.error(`\nDeactivation error: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// electron-aaos pro features
+// ---------------------------------------------------------------------------
+
+function featuresAction() {
+  const { featureGate } = loadLicenseModules();
+
+  console.log('\nElectron AAOS Pro Features\n');
+
+  const byModule = featureGate.listByModule();
+  const modules = Object.keys(byModule).sort();
+
+  for (const moduleName of modules) {
+    const features = byModule[moduleName];
+
+    console.log(`${moduleName.charAt(0).toUpperCase() + moduleName.slice(1)}:`);
+
+    for (const feature of features) {
+      const status = feature.available
+        ? '\u2705'  // Green check
+        : '\u274C'; // Red X
+
+      console.log(`  ${status} ${feature.name}`);
+      console.log(`     ID: ${feature.id}`);
+      if (feature.description) {
+        console.log(`     ${feature.description}`);
+      }
+    }
+    console.log('');
+  }
+
+  const available = featureGate.listAvailable();
+  const total = Object.values(byModule).reduce((sum, arr) => sum + arr.length, 0);
+
+  console.log(`Summary: ${available.length}/${total} features available`);
+  console.log('');
+}
+
+// ---------------------------------------------------------------------------
+// electron-aaos pro validate
+// ---------------------------------------------------------------------------
+
+async function validateAction() {
+  const {
+    licenseApi,
+    readLicenseCache,
+    writeLicenseCache,
+    generateMachineId,
+    maskKey,
+    featureGate,
+    LicenseActivationError,
+  } = loadLicenseModules();
+
+  console.log('\nValidating Electron AAOS Pro license...\n');
+
+  const cache = readLicenseCache();
+
+  if (!cache) {
+    console.log('No license is currently activated.');
+    console.log('Activate: electron-aaos pro activate --key PRO-XXXX-XXXX-XXXX-XXXX');
+    return;
+  }
+
+  console.log(`Key: ${maskKey(cache.key)}`);
+
+  try {
+    const machineId = generateMachineId();
+
+    const result = await licenseApi.validate(cache.key, machineId);
+
+    if (!result.valid) {
+      console.log('\n\u274C License validation failed.');
+      console.log('The license may have been revoked or expired.');
+      console.log('Please contact support or activate a new license.');
+      return;
+    }
+
+    // Update cache with refreshed data
+    const updatedCache = {
+      ...cache,
+      features: result.features,
+      seats: result.seats,
+      expiresAt: result.expiresAt,
+      cacheValidDays: result.cacheValidDays,
+      gracePeriodDays: result.gracePeriodDays,
+      lastValidated: new Date().toISOString(),
+    };
+
+    const writeResult = writeLicenseCache(updatedCache);
+    if (!writeResult.success) {
+      console.log(`Warning: Could not update cache: ${writeResult.error}`);
+    }
+
+    // Reload feature gate
+    featureGate.reload();
+
+    // Display result
+    console.log('\n\u2705 License validated successfully!\n');
+    console.log(`  Features:     ${result.features.join(', ')}`);
+    console.log(`  Seats:        ${result.seats.used}/${result.seats.max} used`);
+    console.log(`  Valid until:  ${formatDate(result.expiresAt)}`);
+    console.log(`  Cache:        Refreshed for ${result.cacheValidDays} days`);
+    console.log('');
+
+  } catch (error) {
+    if (error instanceof LicenseActivationError) {
+      console.error(`\nValidation failed: ${error.message}`);
+      console.error(`Error code: ${error.code}`);
+    } else {
+      console.error(`\nValidation failed: ${error.message}`);
+    }
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// electron-aaos pro setup (AC-12: Install-gate)
+// ---------------------------------------------------------------------------
+
+/**
+ * Setup and verify @electron-aaos-fullstack/pro installation.
+ *
+ * Since @electron-aaos-fullstack/pro is published on the public npm registry,
+ * no special token or .npmrc configuration is needed. This command
+ * installs the package and verifies it's working.
+ *
+ * @param {object} options - Command options
+ * @param {boolean} options.verify - Only verify without installing
+ */
+async function setupAction(options) {
+  console.log('\nElectron AAOS Pro - Setup\n');
+
+  if (options.verify) {
+    // Verify-only mode
+    console.log('Verifying @electron-aaos-fullstack/pro installation...\n');
+
+    try {
+      const { execSync } = require('child_process');
+      const result = execSync('npm ls @electron-aaos-fullstack/pro --json', {
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+      const parsed = JSON.parse(result.toString());
+      const deps = parsed.dependencies || {};
+      if (deps['@electron-aaos-fullstack/pro']) {
+        console.log(`✅ @electron-aaos-fullstack/pro@${deps['@electron-aaos-fullstack/pro'].version} is installed`);
+      } else {
+        console.log('❌ @electron-aaos-fullstack/pro is not installed');
+        console.log('');
+        console.log('Install with:');
+        console.log('  npm install @electron-aaos-fullstack/pro');
+      }
+    } catch {
+      console.log('❌ @electron-aaos-fullstack/pro is not installed');
+      console.log('');
+      console.log('Install with:');
+      console.log('  npm install @electron-aaos-fullstack/pro');
+    }
+    return;
+  }
+
+  // Install mode
+  console.log('@electron-aaos-fullstack/pro is available on the public npm registry.');
+  console.log('No special tokens or configuration needed.\n');
+
+  console.log('Installing @electron-aaos-fullstack/pro...\n');
+
+  try {
+    const { execSync } = require('child_process');
+    execSync('npm install @electron-aaos-fullstack/pro', {
+      stdio: 'inherit',
+      timeout: 120000,
+    });
+    console.log('\n✅ @electron-aaos-fullstack/pro installed successfully!');
+  } catch (error) {
+    console.error(`\n❌ Installation failed: ${error.message}`);
+    console.log('\nTry manually:');
+    console.log('  npm install @electron-aaos-fullstack/pro');
+    process.exit(1);
+  }
+
+  console.log('\n--- Setup Complete ---');
+  console.log('');
+  console.log('To activate your license:');
+  console.log('  electron-aaos pro activate --key PRO-XXXX-XXXX-XXXX-XXXX');
+  console.log('');
+  console.log('To check license status:');
+  console.log('  electron-aaos pro status');
+  console.log('');
+  console.log('Documentation: https://electron-aaos.ai/pro/docs');
+  console.log('');
+}
+
+// ---------------------------------------------------------------------------
+// Command builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the `electron-aaos pro` command with all subcommands.
+ * @returns {Command}
+ */
+function createProCommand() {
+  const proCmd = new Command('pro')
+    .description('Electron AAOS Pro license management');
+
+  // electron-aaos pro activate
+  proCmd
+    .command('activate')
+    .description('Activate a license key')
+    .requiredOption('-k, --key <key>', 'License key (PRO-XXXX-XXXX-XXXX-XXXX)')
+    .action(activateAction);
+
+  // electron-aaos pro status
+  proCmd
+    .command('status')
+    .description('Show current license status')
+    .action(statusAction);
+
+  // electron-aaos pro deactivate
+  proCmd
+    .command('deactivate')
+    .description('Deactivate the current license')
+    .option('-f, --force', 'Skip confirmation prompt')
+    .action(deactivateAction);
+
+  // electron-aaos pro features
+  proCmd
+    .command('features')
+    .description('List all pro features and their availability')
+    .action(featuresAction);
+
+  // electron-aaos pro validate
+  proCmd
+    .command('validate')
+    .description('Force online license revalidation')
+    .action(validateAction);
+
+  // electron-aaos pro setup (AC-12: Install-gate)
+  proCmd
+    .command('setup')
+    .description('Install and verify @electron-aaos-fullstack/pro')
+    .option('--verify', 'Only verify installation without installing')
+    .action(setupAction);
+
+  return proCmd;
+}
+
+module.exports = {
+  createProCommand,
+};

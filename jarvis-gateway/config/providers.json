@@ -1,0 +1,48 @@
+{
+    "providers": [
+        {
+            "id": "deepseek",
+            "name": "DeepSeek V3.2",
+            "baseURL": "https://api.deepseek.com",
+            "apiKeyEnv": "DEEPSEEK_API_KEY",
+            "models": {
+                "default": "deepseek-chat",
+                "reasoning": "deepseek-reasoner"
+            },
+            "enabled": true,
+            "priority": 1
+        },
+        {
+            "id": "kimi",
+            "name": "Kimi K2.5",
+            "baseURL": "https://api.moonshot.ai/v1",
+            "apiKeyEnv": "MOONSHOT_API_KEY",
+            "models": {
+                "default": "moonshot-v1-128k",
+                "reasoning": "moonshot-v1-128k",
+                "reasoningExtraBody": {
+                    "chat_template_kwargs": {
+                        "thinking": true
+                    }
+                }
+            },
+            "temperature": {
+                "default": 0.6,
+                "reasoning": 1.0
+            },
+            "enabled": true,
+            "priority": 2
+        }
+    ],
+    "routing": {
+        "REASONING": "deepseek.reasoning",
+        "CODE": "deepseek.default",
+        "FAST": "kimi.default",
+        "MARKETING": "kimi.default",
+        "DEFAULT": "deepseek.default"
+    },
+    "fallback": {
+        "enabled": true,
+        "maxRetries": 2
+    }
+}

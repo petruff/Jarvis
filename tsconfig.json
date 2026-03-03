@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "typeRoots": [
+      "./types",
+      "./node_modules/@types"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@electron-aaos/electron-aaos-core": ["./.electron-aaos-core/core"],
+      "@electron-aaos/electron-aaos-core/*": ["./.electron-aaos-core/core/*"]
+    }
+  },
+  "include": [
+    "types/**/*.d.ts",
+    ".electron-aaos-core/**/*",
+    "tools/**/*",
+    "scripts/**/*",
+    "src/**/*",
+    "common/**/*",
+    "bin/**/*",
+    "*.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".tsbuildinfo",
+    "coverage",
+    ".test-temp",
+    "**/*-tmpl.*",
+    "**/*.tmpl.*",
+    "**/*-template.*",
+    ".electron-aaos-core/development/templates/**",
+    ".electron-aaos-core.backup*/**",
+    "electron-aaos-core.backup*/**",
+    "electron-aaos-core-deprecated/**",
+    "electron-aaos-core-depracated/**",
+    "eslint.config.js"
+  ]
+}

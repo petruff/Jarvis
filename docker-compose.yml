@@ -1,0 +1,237 @@
+version: '3.9'
+
+services:
+  # PostgreSQL - Relational data storage
+  jarvis-postgres:
+    image: postgres:15-alpine
+    container_name: jarvis-postgres
+    environment:
+      POSTGRES_USER: jarvis
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-jarvis_dev_password}
+      POSTGRES_DB: jarvis
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jarvis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Redis - Caching and message bus
+  jarvis-redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Neo4j - Graph database for semantic memory
+  jarvis-neo4j:
+    image: neo4j:5-community
+    container_name: jarvis-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-jarvis_neo4j_password}
+      NEO4J_PLUGINS: '["apoc"]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j-data:/var/lib/neo4j/data
+      - neo4j-logs:/var/lib/neo4j/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Qdrant - Vector database for episodic memory
+  jarvis-qdrant:
+    image: qdrant/qdrant:latest
+    container_name: jarvis-qdrant
+    environment:
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-qdrant_dev_key}
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Prometheus - Metrics collection
+  jarvis-prometheus:
+    image: prom/prometheus:latest
+    container_name: jarvis-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Grafana - Monitoring dashboards
+  jarvis-grafana:
+    image: grafana/grafana:latest
+    container_name: jarvis-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: false
+    ports:
+      - "3100:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - jarvis-prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Jarvis Backend - Fastify API server
+  jarvis-backend:
+    build:
+      context: .
+      dockerfile: packages/jarvis-backend/Dockerfile
+    container_name: jarvis-backend
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://jarvis:${DATABASE_PASSWORD:-jarvis_dev_password}@jarvis-postgres:5432/jarvis
+      REDIS_URL: redis://jarvis-redis:6379
+      NEO4J_URI: neo4j://jarvis-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-jarvis_neo4j_password}
+      QDRANT_URL: http://jarvis-qdrant:6333
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-for-production}
+    ports:
+      - "3000:3000"
+    depends_on:
+      jarvis-postgres:
+        condition: service_healthy
+      jarvis-redis:
+        condition: service_healthy
+      jarvis-neo4j:
+        condition: service_healthy
+      jarvis-qdrant:
+        condition: service_healthy
+    volumes:
+      - ./packages/jarvis-backend/src:/app/src
+      - ./.jarvis:/app/.jarvis
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Jarvis Gateway - Express gateway server
+  jarvis-gateway:
+    build:
+      context: .
+      dockerfile: jarvis-gateway/Dockerfile
+    container_name: jarvis-gateway
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      BACKEND_URL: http://jarvis-backend:3000
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-for-production}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    ports:
+      - "3001:3001"
+    depends_on:
+      jarvis-backend:
+        condition: service_healthy
+    volumes:
+      - ./jarvis-gateway/src:/app/src
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+  # Jarvis UI - React frontend
+  jarvis-ui:
+    build:
+      context: .
+      dockerfile: jarvis-ui/Dockerfile
+    container_name: jarvis-ui
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://localhost:3001
+      VITE_WS_URL: ws://localhost:3001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - jarvis-gateway
+    volumes:
+      - ./jarvis-ui/src:/app/src
+      - ./jarvis-ui/public:/app/public
+    networks:
+      - jarvis-network
+    restart: unless-stopped
+
+networks:
+  jarvis-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  neo4j-data:
+  neo4j-logs:
+  qdrant-data:
+  prometheus-data:
+  grafana-data:

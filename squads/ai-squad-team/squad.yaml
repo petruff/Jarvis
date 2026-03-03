@@ -1,0 +1,59 @@
+name: Full Company AI Squad
+version: 2.0
+orchestrator: JARVIS
+constitution: .synapse/constitution
+memory: .synapse/context
+
+divisions:
+  meta:
+    - jarvis
+    - electron-aaos-master
+  
+  product:
+    - analyst
+    - pm
+    - cpo
+    - ux-expert
+  
+  engineering:
+    - architect
+    - sm
+    - dev
+    - qa
+    - devops
+    - po
+    - data-engineer
+  
+  marketing:
+    - cmo
+    - copywriter
+    - growth
+    - researcher
+  
+  revenue:
+    - cro
+    - sales-manager
+  
+  operations:
+    - coo
+  
+  finance:
+    - cfo
+  
+  legal:
+    - legal
+    - cso
+  
+  dna_advisors:
+    - alex-hormozi
+    - elon-musk
+    - peter-thiel
+    - jeff-bezos
+    - paul-graham
+    - steve-jobs
+    - ray-dalio
+    - gary-vaynerchuk
+    - sam-ovens
+    - cole-gordon
+    - thiago-finch
+    - secure-net

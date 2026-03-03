@@ -1,0 +1,102 @@
+{
+  "name": "@electron-aaos-fullstack/core",
+  "version": "4.31.0",
+  "description": "Electron AAOS-FullStack Core - Meta-agent and component generation system",
+  "main": "index.js",
+  "module": "index.esm.js",
+  "types": "index.d.ts",
+  "bin": {
+    "electron-aaos-core": "bin/electron-aaos-core.js"
+  },
+  "files": [
+    "lib/",
+    "bin/",
+    "templates/",
+    "utils/",
+    "tasks/",
+    "docs/",
+    "elicitation/",
+    "index.js",
+    "index.esm.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node ../tools/build-core.js",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^12.1.0",
+    "fs-extra": "^11.3.0",
+    "glob": "^10.4.4",
+    "js-yaml": "^4.1.0",
+    "inquirer": "^8.2.6",
+    "validator": "^13.15.15",
+    "diff": "^5.2.0",
+    "highlight.js": "^11.9.0"
+  },
+  "peerDependencies": {
+    "@electron-aaos-fullstack/memory": "^4.31.0",
+    "@electron-aaos-fullstack/security": "^4.31.0",
+    "@electron-aaos-fullstack/performance": "^4.31.0",
+    "@electron-aaos-fullstack/telemetry": "^4.31.0"
+  },
+  "peerDependenciesMeta": {
+    "@electron-aaos-fullstack/memory": {
+      "optional": true
+    },
+    "@electron-aaos-fullstack/security": {
+      "optional": true
+    },
+    "@electron-aaos-fullstack/performance": {
+      "optional": true
+    },
+    "@electron-aaos-fullstack/telemetry": {
+      "optional": true
+    }
+  },
+  "keywords": [
+    "electron-aaos",
+    "meta-agent",
+    "component-generation",
+    "ai-orchestration",
+    "fullstack",
+    "development-tools"
+  ],
+  "author": "Electron AAOS Fullstack Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Electron AAOSAI/electron-aaos-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Electron AAOSAI/electron-aaos-core/issues"
+  },
+  "homepage": "https://github.com/Electron AAOSAI/electron-aaos-core#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.esm.js",
+      "require": "./index.js"
+    },
+    "./templates": "./templates/",
+    "./utils": "./utils/",
+    "./tasks": "./tasks/",
+    "./docs": "./docs/",
+    "./elicitation": "./elicitation/"
+  }
+}

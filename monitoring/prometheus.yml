@@ -1,0 +1,52 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'jarvis-platform'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Jarvis Backend metrics
+  - job_name: 'jarvis-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['jarvis-backend:3000']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Jarvis Gateway metrics
+  - job_name: 'jarvis-gateway'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['jarvis-gateway:3001']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # PostgreSQL via postgres_exporter (optional)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['jarvis-postgres:5432']
+
+  # Redis via redis_exporter (optional)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['jarvis-redis:6379']
+
+  # Node metrics for host monitoring (optional)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+    scheme: http

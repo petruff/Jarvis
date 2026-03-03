@@ -1,0 +1,12 @@
+# Project Context
+**Project:** Synkra AIOS Core v4.0
+**Stage:** setup
+**Last Updated:** 2026-02-19
+**Current Sprint Goal:** Complete AIOS system repair and full company activation
+**Active Stories:** none — system repair in progress
+**Key Decisions:** 
+  - JARVIS v2.0 deployed with .synapse/ memory paths
+  - Constitution loaded and enforced
+  - Full 35-agent company activated
+**Blockers:** none after this repair
+**Next Priority:** Brief human on full company status, await first mission

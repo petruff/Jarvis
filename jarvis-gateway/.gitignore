@@ -1,0 +1,27 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Build
+dist/
+*.js.map
+
+# Dependencies
+node_modules/
+
+# WhatsApp session (sensitive)
+sessions/
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Logs
+logs/
+*.log
+
+# QR code (regenerated on each run)
+qr.png
+
+# OS
+.DS_Store
+Thumbs.db

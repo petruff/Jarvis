@@ -1,0 +1,407 @@
+name: Publish to NPM
+# Story 6.1 - Added concurrency
+# Story 12.9 - Added @electron-aaos/electron-aaos-install package support
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'  # Semantic version tags trigger publish
+  workflow_dispatch:
+    inputs:
+      publish_mode:
+        description: 'Publishing mode'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - stable
+          - beta
+      packages:
+        description: 'Packages to publish (comma-separated, or "all")'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - electron-aaos-core
+          - electron-aaos-install
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel publishing in progress
+
+env:
+  NODE_VERSION: '20'
+  NPM_REGISTRY: 'https://registry.npmjs.org/'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run security audit
+        # Note: Using critical level because high vulns are in dev deps (semantic-release, mocha)
+        # These don't ship to production - only used for CI tooling
+        # See: Story SEC-1 for security audit improvements
+        run: npm audit --audit-level=critical --omit=dev || true
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
+      packages: ${{ steps.detect-packages.outputs.packages }}
+      has_electron-aaos_install: ${{ steps.detect-packages.outputs.has_electron-aaos_install }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get package version
+        id: package-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Detect packages to publish
+        id: detect-packages
+        run: |
+          SELECTED="${{ github.event.inputs.packages }}"
+
+          # Default to all packages on release/tag events
+          if [ -z "$SELECTED" ] || [ "$SELECTED" = "all" ]; then
+            PACKAGES="electron-aaos-core"
+
+            # Add electron-aaos-install if it exists
+            if [ -d "packages/electron-aaos-install" ] && [ -f "packages/electron-aaos-install/package.json" ]; then
+              PACKAGES="$PACKAGES,electron-aaos-install"
+              echo "has_electron-aaos_install=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_electron-aaos_install=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            PACKAGES="$SELECTED"
+            if [ "$SELECTED" = "electron-aaos-install" ]; then
+              echo "has_electron-aaos_install=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_electron-aaos_install=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+          echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          echo "📦 Packages to publish: $PACKAGES"
+
+      - name: Build all packages
+        run: |
+          # Create lib directories for packages that need them
+          for pkg in .electron-aaos-core memory security performance telemetry; do
+            if [ -d "$pkg" ]; then
+              mkdir -p "$pkg/lib"
+              echo '{"built": true}' > "$pkg/lib/build.json"
+            fi
+          done
+          
+          echo "✅ Build preparation complete"
+
+      - name: Create distribution archive
+        run: |
+          mkdir -p dist/@electron-aaos
+          tar -czf dist/@electron-aaos/electron-aaos-core-${{ steps.package-version.outputs.version }}.tar.gz \
+            --exclude=node_modules \
+            --exclude=.git \
+            --exclude=dist \
+            --exclude=tests \
+            --exclude='*.log' \
+            .
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            dist/
+            .electron-aaos-core/lib/
+            memory/lib/
+            security/lib/
+            performance/lib/
+            telemetry/lib/
+          retention-days: 7
+
+  publish:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: ${{ env.NPM_REGISTRY }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+
+      - name: Set publishing tag
+        id: publish-tag
+        run: |
+          if [ "${{ github.event.inputs.publish_mode }}" = "stable" ] || [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.publish_mode }}" = "beta" ]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+          else
+            echo "tag=preview" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if electron-aaos-core should be published
+        id: should-publish
+        run: |
+          PKG_NAME="electron-aaos-core"
+          VERSION="${{ needs.build.outputs.version }}"
+
+          # Check if package exists in registry
+          if npm view "${PKG_NAME}@${VERSION}" version > /dev/null 2>&1; then
+            echo "Version ${VERSION} already exists for ${PKG_NAME}"
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "Package ${PKG_NAME}@${VERSION} not found in registry"
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish electron-aaos-core to NPM
+        if: steps.should-publish.outputs.should_publish == 'true'
+        run: |
+          # Create npmrc for authentication
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
+          # Publish with appropriate tag
+          npm publish --tag ${{ steps.publish-tag.outputs.tag }} --access public
+
+          echo "✅ Published electron-aaos-core@${{ needs.build.outputs.version }} with tag ${{ steps.publish-tag.outputs.tag }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify publication
+        if: steps.should-publish.outputs.should_publish == 'true'
+        run: |
+          # Wait for npm registry to propagate (can take up to 60s)
+          for i in 1 2 3 4 5 6; do
+            sleep 15
+            if npm view "electron-aaos-core@${{ needs.build.outputs.version }}" version > /dev/null 2>&1; then
+              echo "✅ Verified: electron-aaos-core@${{ needs.build.outputs.version }} is available on NPM"
+              exit 0
+            fi
+            echo "⏳ Waiting for npm registry propagation... (attempt $i/6)"
+          done
+
+          echo "❌ Verification failed: electron-aaos-core@${{ needs.build.outputs.version }} not found after 90s"
+          exit 1
+
+  # Story 12.9 - Publish @electron-aaos/electron-aaos-install NPX package
+  publish-electron-aaos-install:
+    needs: [test, build]
+    if: ${{ needs.build.outputs.has_electron-aaos_install == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: ${{ env.NPM_REGISTRY }}
+
+      - name: Install dependencies
+        working-directory: packages/electron-aaos-install
+        run: npm ci
+
+      - name: Get electron-aaos-install version
+        id: pkg-version
+        working-directory: packages/electron-aaos-install
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set publishing tag
+        id: publish-tag
+        run: |
+          if [ "${{ github.event.inputs.publish_mode }}" = "stable" ] || [ "${{ github.event_name }}" = "release" ] || [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.publish_mode }}" = "beta" ]; then
+            echo "tag=beta" >> $GITHUB_OUTPUT
+          else
+            echo "tag=preview" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if already published
+        id: should-publish
+        run: |
+          PKG_NAME="@electron-aaos/electron-aaos-install"
+          VERSION="${{ steps.pkg-version.outputs.version }}"
+
+          if npm view "${PKG_NAME}@${VERSION}" version > /dev/null 2>&1; then
+            echo "Version ${VERSION} already exists for ${PKG_NAME}"
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+          else
+            echo "Package ${PKG_NAME}@${VERSION} not found in registry"
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish @electron-aaos/electron-aaos-install
+        if: steps.should-publish.outputs.should_publish == 'true'
+        working-directory: packages/electron-aaos-install
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          npm publish --tag ${{ steps.publish-tag.outputs.tag }} --access public
+          echo "✅ Published @electron-aaos/electron-aaos-install@${{ steps.pkg-version.outputs.version }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Smoke test - verify npx works
+        if: steps.should-publish.outputs.should_publish == 'true'
+        run: |
+          # Wait for npm registry propagation
+          for i in 1 2 3 4 5 6; do
+            sleep 15
+            if npx @electron-aaos/electron-aaos-install --version 2>/dev/null; then
+              echo "✅ Smoke test passed: npx @electron-aaos/electron-aaos-install --version works"
+              exit 0
+            fi
+            echo "⏳ Waiting for npm propagation... (attempt $i/6)"
+          done
+          echo "⚠️ Smoke test timeout - package may need more time to propagate"
+          # Don't fail the build - propagation can take longer
+
+  notify:
+    needs: [build, publish, publish-electron-aaos-install]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify completion
+        run: |
+          PUBLISHED_PACKAGES=""
+
+          if [ "${{ needs.publish.result }}" = "success" ]; then
+            PUBLISHED_PACKAGES="electron-aaos-core"
+          fi
+
+          if [ "${{ needs.publish-electron-aaos-install.result }}" = "success" ]; then
+            if [ -n "$PUBLISHED_PACKAGES" ]; then
+              PUBLISHED_PACKAGES="$PUBLISHED_PACKAGES, @electron-aaos/electron-aaos-install"
+            else
+              PUBLISHED_PACKAGES="@electron-aaos/electron-aaos-install"
+            fi
+          fi
+
+          if [ -n "$PUBLISHED_PACKAGES" ]; then
+            echo "🎉 Successfully published to NPM:"
+            echo "   Packages: $PUBLISHED_PACKAGES"
+            echo "   Registry: ${{ env.NPM_REGISTRY }}"
+          elif [ "${{ needs.publish.result }}" = "skipped" ] && [ "${{ needs.publish-electron-aaos-install.result }}" = "skipped" ]; then
+            echo "⏭️ No packages needed publishing (already up-to-date)"
+          else
+            echo "❌ Publishing failed"
+            exit 1
+          fi
+
+  create-release-notes:
+    needs: [build, publish, publish-electron-aaos-install]
+    if: github.event_name == 'release' && (needs.publish.result == 'success' || needs.publish-electron-aaos-install.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate release notes
+        run: |
+          # Check if electron-aaos-install was published
+          Electron AAOS_INSTALL_ROW=""
+          if [ "${{ needs.publish-electron-aaos-install.result }}" = "success" ]; then
+            Electron AAOS_INSTALL_ROW="| @electron-aaos/electron-aaos-install | [npmjs.com](https://www.npmjs.com/package/@electron-aaos/electron-aaos-install) | NPX Installer for Electron AAOS |"
+          fi
+
+          cat > release-notes.md << EOF
+          # Electron AAOS-Core v${{ needs.build.outputs.version }}
+
+          ## 📦 NPM Packages
+
+          | Package | NPM Link | Description |
+          |---------|----------|-------------|
+          | electron-aaos-core | [npmjs.com](https://www.npmjs.com/package/electron-aaos-core) | AI-Orchestrated System for Full Stack Development |
+          ${Electron AAOS_INSTALL_ROW}
+
+          ## 🚀 Installation
+
+          \`\`\`bash
+          # Quick install via NPX (recommended for new users)
+          npx @electron-aaos/electron-aaos-install
+
+          # Or global installation
+          npm install -g electron-aaos-core
+
+          # Or as project dependency
+          npm install electron-aaos-core
+          \`\`\`
+
+          ## 📋 What's New
+
+          * ✅ Complete Meta-Agent MVP and Framework Distribution
+          * 🔒 Security hardening with penetration testing
+          * ⚡ Performance optimization framework
+          * 📊 Privacy-conscious telemetry system
+          * 📦 Modular NPM package distribution
+
+          ## 🔗 Links
+
+          * [GitHub Repository](https://github.com/Electron AAOSAI/electron-aaos-core)
+          * [Documentation](https://github.com/Electron AAOSAI/electron-aaos-core#readme)
+          * [Issues](https://github.com/Electron AAOSAI/electron-aaos-core/issues)
+          EOF
+
+      - name: Update release with notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const releaseNotes = fs.readFileSync('release-notes.md', 'utf8');
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id,
+              body: releaseNotes
+            });

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://geminicli.com/schemas/extension.json",
+  "name": "electron-aaos",
+  "displayName": "Electron AAOS Electron AAOS",
+  "version": "1.0.0",
+  "description": "Multi-agent orchestration system for CLI-first development. Brings Electron AAOS agents, hooks, and workflows to Gemini CLI.",
+  "author": "Electron AAOS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/electron-aaos/electron-aaos-core"
+  },
+  "engines": {
+    "gemini-cli": ">=0.26.0"
+  },
+  "capabilities": {
+    "hooks": true,
+    "skills": true,
+    "commands": true,
+    "mcp": false
+  },
+  "activation": {
+    "onStartup": true,
+    "conditions": [
+      {
+        "type": "fileExists",
+        "path": ".electron-aaos-core"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "name": "electron-aaos-status",
+      "description": "Show Electron AAOS system status and provider info",
+      "script": "commands/electron-aaos-status.js"
+    },
+    {
+      "name": "electron-aaos-agents",
+      "description": "List available Electron AAOS agents",
+      "script": "commands/electron-aaos-agents.js"
+    },
+    {
+      "name": "electron-aaos-validate",
+      "description": "Validate Electron AAOS installation and skills",
+      "script": "commands/electron-aaos-validate.js"
+    }
+  ],
+  "skills": [
+    {
+      "name": "dev",
+      "path": "skills/dev.md",
+      "description": "Developer agent - code implementation"
+    },
+    {
+      "name": "architect",
+      "path": "skills/architect.md",
+      "description": "Architect agent - system design"
+    },
+    {
+      "name": "qa",
+      "path": "skills/qa.md",
+      "description": "QA agent - testing and quality"
+    }
+  ],
+  "hooks": {
+    "configPath": "hooks/hooks.json"
+  },
+  "keywords": [
+    "electron-aaos",
+    "agents",
+    "orchestration",
+    "development",
+    "ai",
+    "claude",
+    "multi-agent"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "electron-aaos-pro",
+  "version": "0.1.0",
+  "description": "CLI for Electron AAOS Pro — install, activate and manage your license",
+  "bin": {
+    "electron-aaos-pro": "bin/electron-aaos-pro.js"
+  },
+  "files": [
+    "bin/"
+  ],
+  "keywords": [
+    "electron-aaos",
+    "pro",
+    "license",
+    "cli",
+    "electron-aaos"
+  ],
+  "author": "Electron AAOSAI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Electron AAOSAI/electron-aaos-core.git",
+    "directory": "packages/electron-aaos-pro-cli"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}

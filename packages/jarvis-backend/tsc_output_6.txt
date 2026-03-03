@@ -1,0 +1,1 @@
+src/scrapers/VideoScraper.ts(3,28): error TS2307: Cannot find module '../desktop/chrome' or its corresponding type declarations.
