@@ -145,8 +145,8 @@ function App() {
                 <div className="flex-1 flex items-center justify-center relative w-full min-h-[30vh] pointer-events-none overflow-visible">
                     <ConnectorLines />
 
-                    {/* Central Visualizer - Scales defensively on short screens to avoid clipping */}
-                    <div className={`transition-all duration-500 z-0 opacity-90 scale-75 md:scale-90 lg:scale-100 ${voiceState === 'LISTENING' ? 'scale-[1.15] lg:scale-110' : ''}`}>
+                    {/* Central Visualizer - Self-Scaling via CSS Clamp */}
+                    <div className={`transition-transform duration-500 z-0 opacity-90 ${voiceState === 'LISTENING' ? 'scale-110' : 'scale-100'}`}>
                         <JarvisCore isSpeaking={voiceState === 'SPEAKING'} isListening={voiceState === 'LISTENING'} />
                     </div>
                 </div>

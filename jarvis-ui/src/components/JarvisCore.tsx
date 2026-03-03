@@ -7,7 +7,7 @@ interface JarvisCoreProps {
 
 const JarvisCore: React.FC<JarvisCoreProps> = ({ isSpeaking = false, isListening = false }) => {
     return (
-        <div className="relative flex items-center justify-center w-full aspect-square max-h-full max-w-[28rem] 2xl:max-w-[38rem]" aria-label="Jarvis Core Visualizer" role="img">
+        <div className="relative flex items-center justify-center w-[clamp(15rem,40vh,32rem)] h-[clamp(15rem,40vh,32rem)]" aria-label="Jarvis Core Visualizer" role="img">
             {/* Ambient background glow */}
             <div className={`absolute w-full h-full rounded-full transition-all duration-1000 ${isSpeaking ? 'bg-jarvis-primary/20 blur-3xl scale-110' : isListening ? 'bg-[#ff003c]/20 blur-3xl scale-105' : 'bg-jarvis-primary/5 blur-2xl scale-95'}`}></div>
 
