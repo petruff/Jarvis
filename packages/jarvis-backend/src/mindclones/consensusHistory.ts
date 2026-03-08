@@ -9,9 +9,7 @@
  * - Decision reversals and updates
  */
 
-import { ConsensusDecision } from './types';
-import Redis from 'redis';
-import { Pool } from 'pg';
+import { ConsensusDecision, RedisClient, Pool } from './types';
 
 export interface HistoricalConsensus {
   id: string;
@@ -40,9 +38,9 @@ export interface ConsensusTimeline {
 
 export class ConsensusHistoryTracker {
   private db: Pool;
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
 
-  constructor(db: Pool, cache: Redis.RedisClient) {
+  constructor(db: Pool, cache: RedisClient) {
     this.db = db;
     this.cache = cache;
   }
@@ -100,7 +98,7 @@ export class ConsensusHistoryTracker {
         id,
         consensus.query,
         consensus.decision,
-        parseFloat(consensus.confidence),
+        consensus.confidence,
         timestamp,
         consensus.profile.cloneIds.length,
         domain || 'unknown',

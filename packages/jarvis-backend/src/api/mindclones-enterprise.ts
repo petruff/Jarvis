@@ -11,18 +11,19 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import CloneComparison, { ComparisonMetrics } from '../mindclones/cloneComparison';
-import ConsensusHistoryTracker from '../mindclones/consensusHistory';
+import { ConsensusHistoryTracker } from '../mindclones/consensusHistory';
 import MultiTenantIsolationManager from '../mindclones/multiTenantIsolation';
-import AdvancedRBACManager from '../mindclones/advancedRBAC';
-import BackupDisasterRecoveryManager from '../mindclones/backupDisasterRecovery';
+import { AdvancedRBACManager } from '../mindclones/advancedRBAC';
+import { BackupDisasterRecoveryManager } from '../mindclones/backupDisasterRecovery';
+import { Pool, RedisClient, MindClone } from '../mindclones/types';
 
 // Phase 7 enterprise routes - supports both direct call and plugin pattern
 export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: any = {}) {
   // Handle both calling patterns:
   // 1. Direct call: registerEnterpriseRoutes(fastify, { db, cache })
   // 2. Global fallback: uses (global as any).__phase7Db and __phase7Cache
-  const db = opts?.db || (global as any).__phase7Db;
-  const cache = opts?.cache || (global as any).__phase7Cache;
+  const db: Pool = opts?.db || (global as any).__phase7Db;
+  const cache: RedisClient = opts?.cache || (global as any).__phase7Cache;
 
   console.log('[Phase 7 API] Registering 22 endpoints...', {
     hasDb: !!db,
@@ -46,7 +47,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { cloneId1: string; cloneId2: string } }>(
     '/api/mindclones/enterprise/compare',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { cloneId1: string; cloneId2: string } }>, reply: FastifyReply) => {
       const { cloneId1, cloneId2 } = request.body;
 
       try {
@@ -56,7 +57,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           [cloneId1]
         );
         const clone2 = await db.query(
-          'SELECT * FROM clones WHERE id = $1',
+          'SELECT * FROM clones WHERE id = $2',
           [cloneId2]
         );
 
@@ -64,8 +65,30 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           return reply.status(404).send({ error: 'Clone not found' });
         }
 
-        const cloneData1 = clone1.rows[0];
-        const cloneData2 = clone2.rows[0];
+        const cloneData1: MindClone = {
+          id: clone1.rows[0].id,
+          cloneId: clone1.rows[0].id,
+          dna: clone1.rows[0].dna,
+          createdAt: Number(clone1.rows[0].created_at),
+          updatedAt: Number(clone1.rows[0].updated_at),
+          activationCount: Number(clone1.rows[0].activation_count),
+          successRate: Number(clone1.rows[0].success_rate),
+          sourceDocuments: [],
+          extractionConfidence: 1.0,
+          metadata: { version: '1.0', extractedBy: 'system', notes: '', tags: [] }
+        };
+        const cloneData2: MindClone = {
+          id: clone2.rows[0].id,
+          cloneId: clone2.rows[0].id,
+          dna: clone2.rows[0].dna,
+          createdAt: Number(clone2.rows[0].created_at),
+          updatedAt: Number(clone2.rows[0].updated_at),
+          activationCount: Number(clone2.rows[0].activation_count),
+          successRate: Number(clone2.rows[0].success_rate),
+          sourceDocuments: [],
+          extractionConfidence: 1.0,
+          metadata: { version: '1.0', extractedBy: 'system', notes: '', tags: [] }
+        };
 
         // Compare using CloneComparison
         const metrics = await CloneComparison.compareClones(
@@ -86,8 +109,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           analysis,
           timestamp: Date.now(),
         });
-      } catch (error) {
-        fastify.log.error('Clone comparison failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Clone comparison failed: ${error.message}`);
         return reply.status(500).send({ error: 'Comparison failed' });
       }
     }
@@ -101,16 +124,16 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Querystring: { period?: '1d' | '7d' | '30d' } }>(
     '/api/mindclones/enterprise/history/timeline',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const period = (request.query.period || '7d') as '1d' | '7d' | '30d';
+    async (request, reply) => {
+      const { period = '7d' } = request.query;
 
       try {
         const tracker = new ConsensusHistoryTracker(db, cache);
-        const timeline = await tracker.getTimeline(period);
+        const timeline = await tracker.getTimeline(period as any);
 
         return reply.send(timeline);
-      } catch (error) {
-        fastify.log.error('Timeline fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Timeline fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Timeline fetch failed' });
       }
     }
@@ -122,16 +145,16 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Querystring: { period?: '7d' | '30d' | '90d' } }>(
     '/api/mindclones/enterprise/history/trends',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const period = (request.query.period || '30d') as '7d' | '30d' | '90d';
+    async (request, reply) => {
+      const { period = '30d' } = request.query;
 
       try {
         const tracker = new ConsensusHistoryTracker(db, cache);
-        const trends = await tracker.getTrendAnalysis(period);
+        const trends = await tracker.getTrendAnalysis(period as any);
 
         return reply.send(trends);
-      } catch (error) {
-        fastify.log.error('Trend analysis failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Trend analysis failed: ${error.message}`);
         return reply.status(500).send({ error: 'Trend analysis failed' });
       }
     }
@@ -148,7 +171,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
     };
   }>(
     '/api/mindclones/enterprise/history/search',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { query: string; filters?: { domain?: string; status?: string; minConfidence?: number } } }>, reply: FastifyReply) => {
       const { query, filters } = request.body;
 
       try {
@@ -159,8 +182,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           count: results.length,
           results,
         });
-      } catch (error) {
-        fastify.log.error('History search failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`History search failed: ${error.message}`);
         return reply.status(500).send({ error: 'Search failed' });
       }
     }
@@ -174,19 +197,19 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: any }>(
     '/api/mindclones/enterprise/tenant/create',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: any }>, reply: FastifyReply) => {
       const tenantData = request.body;
 
       try {
         const manager = new MultiTenantIsolationManager(db, cache);
-        const tenantId = await manager.createTenant(tenantData);
+        const tenantId = await manager.createTenant(tenantData as any);
 
         return reply.status(201).send({
           tenantId,
           message: 'Tenant created successfully',
         });
-      } catch (error) {
-        fastify.log.error('Tenant creation failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Tenant creation failed: ${error.message}`);
         return reply.status(500).send({ error: 'Tenant creation failed' });
       }
     }
@@ -198,16 +221,16 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Params: { id: string } }>(
     '/api/mindclones/enterprise/tenant/:id/limits',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const { id } = request.params as { id: string };
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
 
       try {
         const manager = new MultiTenantIsolationManager(db, cache);
         const limits = await manager.checkTenantLimits(id);
 
         return reply.send(limits);
-      } catch (error) {
-        fastify.log.error('Tenant limits fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Tenant limits fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Limits fetch failed' });
       }
     }
@@ -219,14 +242,13 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Params: { id: string }; Querystring: { limit?: number; offset?: number } }>(
     '/api/mindclones/enterprise/tenant/:id/audit',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const { id } = request.params as { id: string };
-      const limit = (request.query.limit as number) || 100;
-      const offset = (request.query.offset as number) || 0;
+    async (request: FastifyRequest<{ Params: { id: string }; Querystring: { limit?: number; offset?: number } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const { limit = 100, offset = 0 } = request.query;
 
       try {
         const manager = new MultiTenantIsolationManager(db, cache);
-        const auditLog = await manager.getAuditLog(id, limit, offset);
+        const auditLog = await manager.getAuditLog(id, Number(limit), Number(offset));
 
         return reply.send({
           count: auditLog.length,
@@ -234,8 +256,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           offset,
           logs: auditLog,
         });
-      } catch (error) {
-        fastify.log.error('Audit log fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Audit log fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Audit log fetch failed' });
       }
     }
@@ -249,7 +271,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId: string } }>(
     '/api/mindclones/enterprise/rbac/roles',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string } }>, reply: FastifyReply) => {
       const { tenantId } = request.body;
 
       try {
@@ -257,8 +279,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         const roles = await manager.listRoles(tenantId);
 
         return reply.send(roles);
-      } catch (error) {
-        fastify.log.error('Roles fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Roles fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Roles fetch failed' });
       }
     }
@@ -270,7 +292,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId: string; name: string; permissions: string[] } }>(
     '/api/mindclones/enterprise/rbac/roles/create',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string; name: string; permissions: string[] } }>, reply: FastifyReply) => {
       const { tenantId, name, permissions } = request.body;
 
       try {
@@ -285,8 +307,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           roleId,
           message: 'Role created successfully',
         });
-      } catch (error) {
-        fastify.log.error('Role creation failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Role creation failed: ${error.message}`);
         return reply.status(500).send({ error: 'Role creation failed' });
       }
     }
@@ -301,8 +323,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
     Body: { tenantId: string; roleId: string; grantedBy: string };
   }>(
     '/api/mindclones/enterprise/rbac/users/:userId/assign',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const { userId } = request.params as { userId: string };
+    async (request: FastifyRequest<{ Params: { userId: string }; Body: { tenantId: string; roleId: string; grantedBy: string } }>, reply: FastifyReply) => {
+      const { userId } = request.params;
       const { tenantId, roleId, grantedBy } = request.body;
 
       try {
@@ -312,8 +334,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         return reply.send({
           message: 'Role assigned successfully',
         });
-      } catch (error) {
-        fastify.log.error('Role assignment failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Role assignment failed: ${error.message}`);
         return reply.status(500).send({ error: 'Assignment failed' });
       }
     }
@@ -333,7 +355,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
     };
   }>(
     '/api/mindclones/enterprise/rbac/check',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string; userId: string; action: string; resourceType: string; resourceId?: string } }>, reply: FastifyReply) => {
       const { tenantId, userId, action, resourceType, resourceId } = request.body;
 
       try {
@@ -352,8 +374,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           action,
           resourceType,
         });
-      } catch (error) {
-        fastify.log.error('Permission check failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Permission check failed: ${error.message}`);
         return reply.status(500).send({ error: 'Permission check failed' });
       }
     }
@@ -365,19 +387,19 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId: string; userId?: string; limit?: number } }>(
     '/api/mindclones/enterprise/rbac/audit',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string; userId?: string; limit?: number } }>, reply: FastifyReply) => {
       const { tenantId, userId, limit = 50 } = request.body;
 
       try {
         const manager = new AdvancedRBACManager(db, cache);
-        const auditLog = await manager.getPermissionAuditLog(tenantId, userId, limit);
+        const auditLog = await manager.getPermissionAuditLog(tenantId, userId, Number(limit));
 
         return reply.send({
           count: auditLog.length,
           logs: auditLog,
         });
-      } catch (error) {
-        fastify.log.error('RBAC audit log fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`RBAC audit log fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Audit log fetch failed' });
       }
     }
@@ -391,7 +413,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId?: string } }>(
     '/api/mindclones/enterprise/backup/perform',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
       const { tenantId } = request.body;
 
       try {
@@ -414,8 +436,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           row_count: metadata.row_count,
           duration_ms: metadata.duration_ms,
         });
-      } catch (error) {
-        fastify.log.error('Backup failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Backup failed: ${error.message}`);
         return reply.status(500).send({ error: 'Backup failed' });
       }
     }
@@ -427,7 +449,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId: string; limit?: number } }>(
     '/api/mindclones/enterprise/backup/history',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string; limit?: number } }>, reply: FastifyReply) => {
       const { tenantId, limit = 10 } = request.body;
 
       try {
@@ -441,14 +463,14 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         };
 
         const manager = new BackupDisasterRecoveryManager(db, cache, config);
-        const history = await manager.getBackupHistory(tenantId, limit);
+        const history = await manager.getBackupHistory(tenantId, Number(limit));
 
         return reply.send({
           count: history.length,
           backups: history,
         });
-      } catch (error) {
-        fastify.log.error('Backup history fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Backup history fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'History fetch failed' });
       }
     }
@@ -460,7 +482,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId: string } }>(
     '/api/mindclones/enterprise/backup/stats',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string } }>, reply: FastifyReply) => {
       const { tenantId } = request.body;
 
       try {
@@ -477,8 +499,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         const stats = await manager.getBackupStatistics(tenantId);
 
         return reply.send(stats);
-      } catch (error) {
-        fastify.log.error('Backup stats fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Backup stats fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Stats fetch failed' });
       }
     }
@@ -498,7 +520,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
     };
   }>(
     '/api/mindclones/enterprise/recovery/plan/create',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId: string; backupId: string; targetTime: number; recoveryType?: 'full' | 'point-in-time' | 'table-level'; tablesToRecover?: string[] } }>, reply: FastifyReply) => {
       const { tenantId, backupId, targetTime, recoveryType = 'full', tablesToRecover } = request.body;
 
       try {
@@ -515,7 +537,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         const planId = await manager.createRecoveryPlan(
           tenantId,
           backupId,
-          targetTime,
+          Number(targetTime),
           recoveryType,
           tablesToRecover
         );
@@ -524,8 +546,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
           plan_id: planId,
           message: 'Recovery plan created successfully',
         });
-      } catch (error) {
-        fastify.log.error('Recovery plan creation failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Recovery plan creation failed: ${error.message}`);
         return reply.status(500).send({ error: 'Plan creation failed' });
       }
     }
@@ -537,8 +559,8 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Params: { id: string } }>(
     '/api/mindclones/enterprise/recovery/plan/:id/execute',
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const { id } = request.params as { id: string };
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
 
       try {
         const config = {
@@ -551,14 +573,14 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         };
 
         const manager = new BackupDisasterRecoveryManager(db, cache, config);
-        const result = await manager.executeRecoveryPlan(id);
+        await manager.executeRecoveryPlan(id);
 
         return reply.send({
-          status: result.status,
+          status: 'completed',
           message: 'Recovery plan executed successfully',
         });
-      } catch (error) {
-        fastify.log.error('Recovery plan execution failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Recovery plan execution failed: ${error.message}`);
         return reply.status(500).send({ error: 'Plan execution failed' });
       }
     }
@@ -570,7 +592,7 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
    */
   fastify.post<{ Body: { tenantId?: string; limit?: number } }>(
     '/api/mindclones/enterprise/recovery/plans',
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { tenantId?: string; limit?: number } }>, reply: FastifyReply) => {
       const { tenantId, limit = 20 } = request.body;
 
       try {
@@ -584,14 +606,14 @@ export async function registerEnterpriseRoutes(fastify: FastifyInstance, opts: a
         };
 
         const manager = new BackupDisasterRecoveryManager(db, cache, config);
-        const plans = await manager.listRecoveryPlans(tenantId, limit);
+        const plans = await manager.listRecoveryPlans(tenantId || 'system');
 
         return reply.send({
           count: plans.length,
           plans,
         });
-      } catch (error) {
-        fastify.log.error('Recovery plans fetch failed:', error);
+      } catch (error: any) {
+        fastify.log.error(`Recovery plans fetch failed: ${error.message}`);
         return reply.status(500).send({ error: 'Plans fetch failed' });
       }
     }

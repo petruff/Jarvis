@@ -28,26 +28,28 @@ export default {
                 mono: ['"Fira Code"', 'monospace'],
                 sans: ['"Inter"', 'sans-serif'],
             },
-            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            'spin-slow': 'spin 8s linear infinite',
-            'spin-slower': 'spin 12s linear infinite',
-            'spin-reverse': 'spin-reverse 1s linear infinite',
-            'spin-reverse-slow': 'spin-reverse 8s linear infinite',
-            'spin-reverse-slower': 'spin-reverse 12s linear infinite',
-            'ping-slow': 'ping 3s cubic-bezier(0, 0, 0.2, 1) infinite',
-        },
-        keyframes: {
-            'spin-reverse': {
-                'from': { transform: 'rotate(360deg)' },
-                'to': { transform: 'rotate(0deg)' },
+            animation: {
+                'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                'spin-slow': 'spin 8s linear infinite',
+                'spin-slower': 'spin 12s linear infinite',
+                'spin-reverse': 'spin-reverse 1s linear infinite',
+                'spin-reverse-slow': 'spin-reverse 8s linear infinite',
+                'spin-reverse-slower': 'spin-reverse 12s linear infinite',
+                'ping-slow': 'ping 3s cubic-bezier(0, 0, 0.2, 1) infinite',
+            },
+            keyframes: {
+                'spin-reverse': {
+                    'from': { transform: 'rotate(360deg)' },
+                    'to': { transform: 'rotate(0deg)' },
+                }
+            },
+            boxShadow: {
+                'glow': '0 0 20px rgba(0, 243, 255, 0.3)',
+                'glow-sm': '0 0 10px rgba(0, 243, 255, 0.2)',
+                'glow-md': '0 0 30px rgba(0, 243, 255, 0.4)',
+                'glow-lg': '0 0 50px rgba(0, 243, 255, 0.5)',
             }
-        },
-        boxShadow: {
-            'glow': '0 0 20px rgba(0, 243, 255, 0.3)',
-            'glow-sm': '0 0 10px rgba(0, 243, 255, 0.2)',
-            'glow-md': '0 0 30px rgba(0, 243, 255, 0.4)',
-            'glow-lg': '0 0 50px rgba(0, 243, 255, 0.5)',
         }
     },
     plugins: [],
-}
+};

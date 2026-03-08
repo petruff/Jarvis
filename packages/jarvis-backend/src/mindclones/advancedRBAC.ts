@@ -8,8 +8,7 @@
  * - Audit trail for authorization decisions
  */
 
-import { Pool } from 'pg';
-import Redis from 'redis';
+import { RedisClient, Pool } from './types';
 
 export type Permission =
   | 'clone:create'
@@ -109,10 +108,10 @@ const DEFAULT_ROLES: Record<string, { name: string; permissions: Permission[] }>
 
 export class AdvancedRBACManager {
   private db: Pool;
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
   private permissionCache: Map<string, Permission[]> = new Map();
 
-  constructor(db: Pool, cache: Redis.RedisClient) {
+  constructor(db: Pool, cache: RedisClient) {
     this.db = db;
     this.cache = cache;
   }
@@ -286,7 +285,7 @@ export class AdvancedRBACManager {
     // Check Redis cache
     const cached = await this.cache.get(cacheKey);
     if (cached) {
-      return JSON.parse(cached);
+      return JSON.parse(cached as string);
     }
 
     // Query database
@@ -340,8 +339,7 @@ export class AdvancedRBACManager {
 
     if (!allowed) {
       throw new Error(
-        `Unauthorized: ${context.user_id} does not have permission '${context.action}' on ${context.resource_type}${
-          context.resource_id ? ` (${context.resource_id})` : ''
+        `Unauthorized: ${context.user_id} does not have permission '${context.action}' on ${context.resource_type}${context.resource_id ? ` (${context.resource_id})` : ''
         }`
       );
     }

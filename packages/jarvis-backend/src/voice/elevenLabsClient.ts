@@ -34,10 +34,10 @@ class ElevenLabsClient {
     constructor(apiKey: string, config: Partial<ElevenLabsConfig> = {}) {
         this.config = {
             apiKey,
-            voiceId: 'EXAVITQu4vr4xnSDxMaL', // "Aria" female voice (calm, professional)
-            modelId: 'eleven_turbo_v2_5', // Fastest model
-            stability: 0.5,
-            similarityBoost: 0.75,
+            voiceId: 'nT9vBXLB00T54p0x5vG9', // Brian (Premium Bilingual)
+            modelId: 'eleven_multilingual_v2', // High fidelity multilingual
+            stability: 0.45,
+            similarityBoost: 0.8,
             streamAudio: true,
             ...config,
         };
@@ -46,15 +46,17 @@ class ElevenLabsClient {
     }
 
     private initializeVoiceProfiles(): void {
+        const bilingualVoiceId = 'nT9vBXLB00T54p0x5vG9'; // Brian
+
         // Map emotions to voice characteristics
         this.voiceProfiles.set('neutral', {
-            voiceId: 'EXAVITQu4vr4xnSDxMaL', // Aria
+            voiceId: bilingualVoiceId,
             personality: 'british-butler',
             description: 'Professional, neutral tone',
         });
 
         this.voiceProfiles.set('confident', {
-            voiceId: 'EXAVITQu4vr4xnSDxMaL', // Aria with higher stability
+            voiceId: bilingualVoiceId,
             personality: 'military-commander',
             description: 'Authoritative, confident',
         });
@@ -97,7 +99,8 @@ class ElevenLabsClient {
      */
     async synthesize(
         text: string,
-        emotion?: Emotion
+        emotion?: Emotion,
+        language: 'en' | 'pt-BR' = 'en'
     ): Promise<Buffer> {
         if (!text?.trim()) {
             throw new Error('Text cannot be empty');
@@ -127,8 +130,8 @@ class ElevenLabsClient {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        text: text.substring(0, 500), // ElevenLabs has length limits
-                        model_id: this.config.modelId,
+                        text: text.substring(0, 500),
+                        model_id: language === 'pt-BR' ? 'eleven_multilingual_v2' : 'eleven_turbo_v2_5',
                         voice_settings: {
                             stability,
                             similarity_boost: similarityBoost,

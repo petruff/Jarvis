@@ -8,6 +8,7 @@ import { agentBus } from './agent-bus/redis-streams';
 import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { dynamicInterpreter } from './tools/dynamicInterpreter';
 
 const execAsync = promisify(exec);
 
@@ -125,6 +126,34 @@ const INTERNAL_MEMORY_TOOLS = [
                 y: { type: 'number', description: 'Y coordinate' }
             },
             required: ['x', 'y']
+        }
+    },
+    // ─── Phase 8: AGI Dynamic Tooling ──────────────────────────────────────────
+    {
+        name: 'create_dynamic_tool',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'AGI Dynamic Tooling. Use this when you absolutely need a capability that does not exist in your predefined tools. This will write and compile a custom tool on the fly using standard JS running in an isolated Node VM.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                toolName: { type: 'string', description: 'Name of the tool (no spaces, e.g. "parse_yaml")' },
+                intent: { type: 'string', description: 'What the tool should do technically (e.g. "convert xml string to json")' },
+                description: { type: 'string', description: 'Agentic description of the tool for your own reference later' }
+            },
+            required: ['toolName', 'intent', 'description']
+        }
+    },
+    {
+        name: 'execute_dynamic_tool',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'Execute a custom tool previously compiled by create_dynamic_tool. Ensure you pass the correct arguments structure you defined when creating it.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                toolName: { type: 'string', description: 'Name of the tool to run' },
+                args: { type: 'object', description: 'JSON object parameters to pass to the tool' }
+            },
+            required: ['toolName', 'args']
         }
     },
     // ─── Phase J: 14 New Internal Agent Tools ──────────────────────────────────
@@ -441,6 +470,29 @@ async function handleInternalTool(toolName: string, args: Record<string, any>, a
                 return `Mission dispatched successfully to the ${targetSquad} squad. You may now mark your task as done if you have nothing else to do.`;
             } catch (err: any) {
                 return `Failed to dispatch squad: ${err.message}`;
+            }
+        }
+
+        // ─── Phase 8 AGI: Dynamic Interpreters ────────────────────────────────────
+        if (toolName === 'create_dynamic_tool') {
+            try {
+                const { toolName: name, intent, description } = args;
+                if (!name || !intent) return 'Error: toolName and intent are required.';
+                const res = await dynamicInterpreter.generateAndRegisterTool(name, intent, description);
+                return res;
+            } catch (err: any) {
+                return `Failed to create dynamic tool: ${err.message}`;
+            }
+        }
+
+        if (toolName === 'execute_dynamic_tool') {
+            try {
+                const { toolName: name, args: toolArgs } = args;
+                if (!name) return 'Error: toolName is required.';
+                const result = await dynamicInterpreter.executeTool(name, toolArgs || {});
+                return `Execution Result:\n${typeof result === 'object' ? JSON.stringify(result, null, 2) : result}`;
+            } catch (err: any) {
+                return `Failed to execute dynamic tool: ${err.message}`;
             }
         }
 

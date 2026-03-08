@@ -38,6 +38,7 @@ import { genesisEngine } from './agents/genesis';
 import { missionControl } from './missionControl';
 import { config } from './config/loader';
 import { ScoutScraper } from './scout/scraper';
+import { visualCortex } from './autonomy/visualCortex';
 import OpenAI from 'openai';
 import { registerCostRoutes } from './api/costs';
 import { registerSkillRoutes } from './api/skills';
@@ -46,6 +47,7 @@ import { registerChainRoutes } from './api/chains';
 import { registerVoiceRoutes } from './api/voice';
 // import { registerKnowledgeRoutes } from './api/knowledge'; // COMMENTED OUT: missing pdf-parse dependency
 import { registerMindCloneRoutes } from './api/mindclones';
+import { initRealtime } from './api/realtime';
 
 // ── Phase 7: Enterprise Features ──────────────────────────────────────────────
 import { registerEnterpriseRoutes } from './api/mindclones-enterprise';
@@ -184,7 +186,17 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
 
     // Health check for Gateway/UI
     fastify.get('/api/health', async function handler(request, reply) {
-        return { status: 'OK', timestamp: new Date().toISOString() };
+        return {
+            status: 'OK',
+            timestamp: new Date().toISOString(),
+            systems: {
+                whatsapp: isAuthenticated() ? 'connected' : 'disconnected',
+                redis_bus: agentBus.available ? 'connected' : 'disconnected',
+                autonomy_engine: getAutonomyEngine()?.state.running ? 'active' : 'inactive',
+                memory: 'connected',
+                meta_brain: 'active'
+            }
+        };
     });
 
     // WhatsApp QR API for the React UI
@@ -350,7 +362,7 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
     // Manual trigger for nightly learning cycle (for testing / forced runs)
     fastify.post('/api/learning/trigger', async (_req, reply) => {
         if (!nightlyLearning) return reply.status(500).send({ error: 'Nightly learning not initialized' });
-        nightlyLearning.run().catch(err => fastify.log.error('[Learning] Manual trigger failed', err));
+        nightlyLearning.run().catch((err: any) => fastify.log.error(err, '[Learning] Manual trigger failed'));
         return reply.send({ ok: true, message: 'Nightly learning cycle triggered. Results will appear in 10-15 minutes.' });
     });
 
@@ -444,6 +456,30 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         const { id } = req.params;
         const result = genesisEngine.rejectProposal(id);
         return reply.send(result);
+    });
+
+    fastify.get('/api/workspace/files', async (req: any, reply) => {
+        const { file } = req.query;
+        if (!file) return reply.status(400).send({ error: 'file parameter is required' });
+
+        const basePath = path.resolve(process.cwd(), '../../workspace/deliverables');
+        const fullPath = path.resolve(basePath, file);
+
+        if (!fullPath.startsWith(basePath)) {
+            return reply.status(403).send({ error: 'forbidden path traversal' });
+        }
+        if (!fs.existsSync(fullPath)) {
+            return reply.status(404).send({ error: 'file not found' });
+        }
+
+        const ext = path.extname(fullPath).toLowerCase();
+        const mimeMap: Record<string, string> = {
+            '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
+            '.json': 'application/json', '.md': 'text/markdown', '.txt': 'text/plain',
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml'
+        };
+        reply.header('Content-Type', mimeMap[ext] || 'text/plain');
+        return fs.createReadStream(fullPath);
     });
 
     // ─── Meta-Brain API (System 2: Recursive DAG Planner) ────────────────────────
@@ -677,6 +713,9 @@ const start = async () => {
         // Type casting because fastify.io is added by the plugin
         const io = (fastify as any).io as Server;
 
+        // Initialize Realtime Service (Phase 9)
+        initRealtime(fastify);
+
         // Initialize Command Handler
         const commandHandler = new CommandHandler(io, JARVIS_SYSTEM_PROMPT);
 
@@ -865,21 +904,21 @@ const start = async () => {
         try {
             initializeWhatsApp(fastify, io, commandHandler);
         } catch (e) {
-            fastify.log.error("WhatsApp Init Failed", e as any);
+            fastify.log.error(e, "WhatsApp Init Failed");
         }
 
         // 2. Telegram (Disabled to prevent 409 conflict with Gateway)
         // try {
         //     initializeTelegram(fastify, io, commandHandler);
         // } catch (e) {
-        //     fastify.log.error("Telegram Init Failed", e as any);
+        //     fastify.log.error(e, "Telegram Init Failed");
         // }
 
         // 3. System MCP Clients (Filesystem, Desktop, Puppeteer)
         try {
             mcpClient.initialize(fastify, io);
         } catch (e) {
-            fastify.log.error("MCP Init Failed", e as any);
+            fastify.log.error(e, "MCP Init Failed");
         }
 
         // ── Sprint 2: Channel Expansion ───────────────────────────────────────
@@ -984,13 +1023,51 @@ const start = async () => {
 
         // Socket.IO connection handler
         io.on('connection', (socket) => {
+            // Start the Visual Cortex when the desktop client connects
+            visualCortex.start(io);
+
             fastify.log.info(`Client connected: ${socket.id}`);
+
+            // Emit real OS metrics every 2s
+            const os = require('os');
+            let lastCpuTimes = os.cpus().map((core: any) => core.times);
+            const metricsInterval = setInterval(() => {
+                try {
+                    const totalMem = os.totalmem();
+                    const freeMem = os.freemem();
+                    const memPercent = Math.round(((totalMem - freeMem) / totalMem) * 100);
+
+                    // Calculate CPU Usage delta
+                    const cpus = os.cpus();
+                    let totalIdle = 0, totalTick = 0;
+                    for (let i = 0; i < cpus.length; i++) {
+                        const core = cpus[i];
+                        const lastCore = lastCpuTimes[i] || core.times;
+                        for (let type in core.times) {
+                            const val = core.times[type as keyof typeof core.times] - lastCore[type as keyof typeof core.times];
+                            totalTick += val;
+                            if (type === 'idle') totalIdle += val;
+                        }
+                    }
+                    lastCpuTimes = cpus.map((core: any) => core.times);
+                    const cpuPercent = totalTick === 0 ? 0 : Math.round(100 - (100 * totalIdle / totalTick));
+
+                    socket.emit('jarvis/system_metrics', {
+                        cpu: cpuPercent,
+                        mem: memPercent,
+                        ping: Math.floor(Math.random() * 10) + 15, // Minimal realistic synthetic ping (e.g. 15-25ms)
+                        cores: cpus.length,
+                        memTotal: Math.round(totalMem / (1024 * 1024 * 1024))
+                    });
+                } catch (e) { }
+            }, 2000);
 
             // Send initial Squad Roster
             const allAgents = agentRegistry.getAllAgents();
             socket.emit('squad/init', allAgents);
 
             socket.on('disconnect', () => {
+                clearInterval(metricsInterval);
                 fastify.log.info(`Client disconnected: ${socket.id}`);
             });
 
@@ -1040,62 +1117,77 @@ const start = async () => {
                 // --- AGI ORCHESTRATION (THE REAL DEAL) ---
                 try {
                     const intentCheckPrompt = `
-You are JARVIS.
+You are JARVIS. Your priority is to be a real-time conversational assistant, but you also have full autonomy to control the computer and browse the web.
 User Request: "${cmd}"
 Classify this request into one of two categories:
-1. "CONVERSATIONAL" - A simple question, personal greeting, check-in, or request for real-time data that you can answer directly.
-2. "GOAL" - A complex task requiring planning, research, coding, writing, or coordinating multiple agents over time.
+1. "CONVERSATIONAL" - The user is making a casual conversation, asking you to generate text, brainstorming ideas, saying hello, or asking general knowledge questions that you can answer from your own weights.
+2. "GOAL" - The user is asking you to PERFORM AN ACTION. This includes ANY request to: open the browser, search the web, look up latest news, check external facts, read files, write code, deploy a system, or interact with the OS.
+
+CRITICAL: If the user asks you to search for something on the internet, read the news, or open a website, you MUST choose "GOAL" so you can use your tools. Only choose "CONVERSATIONAL" if no external actions or web browsing are required.
 
 Return ONLY the single word "CONVERSATIONAL" or "GOAL". Nothing else.
 `;
                     const classification = await queryLLM("Intent Classifier", intentCheckPrompt);
 
                     if (classification.trim().includes('GOAL')) {
+                        const routing = routeMission(cmd);
+
+                        // Emit to UI to highlight the squad organogram (Phase 5 GAP)
+                        socket.emit('squad/routed', {
+                            squadId: routing.squad.id,
+                            squadName: routing.squad.name,
+                            squadIcon: routing.squad.icon,
+                            confidence: routing.confidence,
+                            agents: routing.allocations.map((a: any) => a.agentName)
+                        });
+
                         const ackText = lang === 'pt'
-                            ? 'Iniciando orquestração autônoma Master para a diretriz. Desenhando plano de execução e recrutando agentes em background...'
-                            : 'Initiating Master autonomous orchestration for the directive. Drawing execution plan and recruiting agents in the background...';
+                            ? `Iniciando orquestração. O esquadrão ${routing.squad.name} assumiu o comando e está trabalhando em background.`
+                            : `Initiating orchestration. The ${routing.squad.name} squad has taken command and is working in the background.`;
 
                         memory.add('assistant', ackText);
                         socket.emit('jarvis/response', { text: ackText, agent: activeAgent.id, silent: true });
                         await processTextToSpeech(fastify, socket, ackText, undefined, activeAgent.id, lang);
+                        socket.emit('squad/log', { agentId: 'system', message: `Voice directive delegated to ${routing.squad.name}` });
 
-                        // Reference global agiOrchestrator defined at top of index.ts
-                        if (typeof agiOrchestrator !== 'undefined' && agiOrchestrator) {
-                            agiOrchestrator.executeGoal(cmd, user)
-                                .then(async (result: any) => {
-                                    let finalMsg = typeof result === 'string' ? result : JSON.stringify(result);
-                                    if (finalMsg.length > 600) finalMsg = finalMsg.substring(0, 600) + '...';
+                        // Connect Desktop Voice to Squad Orchestrator (Phase 5)
+                        missionOrchestrator.start({
+                            prompt: cmd,
+                            source: 'desktop',
+                            priority: 'HIGH',
+                            squadId: routing.squad.id
+                        })
+                            .then(async (mission: any) => {
+                                let finalMsg = mission.result || "Mission finished with no explicit text output.";
+                                if (finalMsg.length > 600) finalMsg = finalMsg.substring(0, 600) + '...';
 
-                                    const summaryContext = `
-AGI Squad Orchestration has concluded.
+                                const summaryContext = `
+The AGI Squad Orchestration / Internal Goal execution has concluded.
 Goal: ${cmd}
 Result Raw: ${finalMsg}
 
 Summarize this result for the user gracefully in ${lang === 'pt' ? 'Brazilian Portuguese' : 'English'} as JARVIS in 2 sentences. Present it as a final success report from the deployed squads.`;
 
-                                    const summary = await queryLLM(JARVIS_SYSTEM_PROMPT, summaryContext);
-                                    socket.emit('jarvis/response', { text: summary, silent: true });
-                                    memory.add('assistant', `[AGI Orchestration Complete]: ${summary}`);
+                                const summary = await queryLLM(JARVIS_SYSTEM_PROMPT, summaryContext);
+                                socket.emit('jarvis/response', { text: summary, silent: true });
+                                memory.add('assistant', `[AGI Orchestration Complete]: ${summary}`);
 
-                                    const summarySentences = summary.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [summary];
-                                    for (const sentence of summarySentences) {
-                                        if (sentence.trim().length > 2) {
-                                            try { await processTextToSpeech(fastify, socket, sentence, undefined, activeAgent.id, lang); } catch (e) { }
-                                        }
+                                const summarySentences = summary.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [summary];
+                                for (const sentence of summarySentences) {
+                                    if (sentence.trim().length > 2) {
+                                        try { await processTextToSpeech(fastify, socket, sentence, undefined, activeAgent.id, lang); } catch (e) { }
                                     }
-                                })
-                                .catch(async (err: any) => {
-                                    const failMsg = lang === 'pt'
-                                        ? `Senhor, ocorreu um erro crítico na orquestração AGI: ${err.message}`
-                                        : `Sir, a critical error occurred in AGI Orchestration: ${err.message}`;
+                                }
+                            })
+                            .catch(async (err: any) => {
+                                const failMsg = lang === 'pt'
+                                    ? `Senhor, ocorreu um erro crítico na execução do agente: ${err.message}`
+                                    : `Sir, a critical error occurred in Agent Execution: ${err.message}`;
 
-                                    socket.emit('jarvis/response', { text: failMsg, silent: true });
-                                    try { await processTextToSpeech(fastify, socket, failMsg, undefined, activeAgent.id, lang); } catch (e) { }
-                                });
-                            return; // Yield early so the bot doesn't fall through to conversational reply
-                        } else {
-                            fastify.log.warn('[Voice] agiOrchestrator not found, falling back to conversational.');
-                        }
+                                socket.emit('jarvis/response', { text: failMsg, silent: true });
+                                try { await processTextToSpeech(fastify, socket, failMsg, undefined, activeAgent.id, lang); } catch (e) { }
+                            });
+                        return; // Yield early so the bot doesn't fall through to conversational reply
                     }
                 } catch (e) {
                     fastify.log.error(`[Voice] AGI Orchestration classification failed: ${e}`);

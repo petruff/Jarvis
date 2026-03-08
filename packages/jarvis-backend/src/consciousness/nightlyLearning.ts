@@ -156,6 +156,19 @@ export class NightlyLearningCycle {
                 console.log(`[LEARNING] ${saved.length} DNA mutations saved to store, awaiting Founder approval`);
             }
 
+            // ── Phase 8 AGI: Continuous Mathematical Fine-Tuning ─────────────────
+            try {
+                const { fineTuningService } = require('../api/fineTuning');
+                const recentAll = await this.episodicMemory.getRecentHistory(48); // last 48 hours
+                const datasetPath = await fineTuningService.exportToJSONL(recentAll);
+                if (datasetPath) {
+                    await fineTuningService.initiateFineTuningJob(datasetPath);
+                    console.log(`[LEARNING] Mathematical Fine-Tuning cycle launched successfully.`);
+                }
+            } catch (e: any) {
+                console.error(`[LEARNING] Fine-Tuning initialization failed: ${e.message}`);
+            }
+
             // ── Compile Nightly Report ─────────────────────────────────────────────
             result.nightlyReport = await this.compileReport(result);
             result.completedAt = new Date().toISOString();

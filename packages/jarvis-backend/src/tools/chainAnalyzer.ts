@@ -1,7 +1,7 @@
 // Story 4.4: Chain Analyzer
 // Orchestrates tool chaining optimization
 
-import { Tool, DependencyGraph, DependencyAnalyzer } from './dependencyAnalyzer'
+import { ToolDef as Tool, DependencyGraph, DependencyAnalyzer } from './dependencyAnalyzer'
 import { ChainOptimizer, OptimizedChain } from './chainOptimizer'
 import { ResultPrecomputer } from './resultPrecomputer'
 
@@ -34,7 +34,7 @@ export class ChainAnalyzer {
     const graph = this.analyzer.buildGraph(tools)
 
     // Optimize execution order
-    const optimization = this.optimizer.optimizeChain(tools, toolIds, graph)
+    const optimization = this.optimizer.optimizeChain(toolIds, graph)
 
     // Find parallel opportunities
     const parallelOps = this.optimizer.getParallelOpportunities(toolIds, graph)
@@ -64,7 +64,7 @@ export class ChainAnalyzer {
   }> {
     const startTime = Date.now()
     const graph = this.analyzer.buildGraph(tools)
-    const optimization = this.optimizer.optimizeChain(tools, toolIds, graph)
+    const optimization = this.optimizer.optimizeChain(toolIds, graph)
 
     const results: Record<string, any> = {}
     const statsBefore = this.precomputer.getStats()
@@ -96,7 +96,7 @@ export class ChainAnalyzer {
     const nodes = Array.from(graph.tools.values()).map((tool) => ({
       id: tool.id,
       label: tool.name,
-      duration: tool.estimatedDuration,
+      duration: tool.estimatedDurationMs,
       parallelizable: tool.parallelizable,
     }))
 

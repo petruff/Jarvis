@@ -26,7 +26,7 @@ module.exports = {
         {
             name: 'jarvis-ui',
             script: './node_modules/vite/bin/vite.js',
-            args: 'dev',
+            args: 'dev -- --port 8080',
             cwd: './jarvis-ui',
             watch: false,
             max_memory_restart: '512M',

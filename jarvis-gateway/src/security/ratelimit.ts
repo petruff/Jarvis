@@ -4,11 +4,13 @@
 import { logger } from '../logger';
 
 const MAX_REQUESTS_PER_MINUTE = 10;
+const AGI_MAX_REQUESTS_PER_MINUTE = 50;
 const MAX_CONCURRENT_TOOLS = 3;
 
 interface UserBucket {
     count: number;
     resetAt: number;
+    isAGI: boolean;
     queue: Array<() => void>;
 }
 
@@ -19,7 +21,9 @@ function getBucket(userId: string): UserBucket {
     const now = Date.now();
     let bucket = userBuckets.get(userId);
     if (!bucket || now > bucket.resetAt) {
-        bucket = { count: 0, resetAt: now + 60_000, queue: [] };
+        // Simple AGI check logic - typically based on token or metadata
+        const isAGI = userId.startsWith('agi-') || userId === 'jarvis-core';
+        bucket = { count: 0, resetAt: now + 60_000, isAGI, queue: [] };
         userBuckets.set(userId, bucket);
     }
     return bucket;
@@ -27,13 +31,16 @@ function getBucket(userId: string): UserBucket {
 
 export function checkRateLimit(userId: string): void {
     const bucket = getBucket(userId);
-    if (bucket.count >= MAX_REQUESTS_PER_MINUTE) {
+    const limit = bucket.isAGI ? AGI_MAX_REQUESTS_PER_MINUTE : MAX_REQUESTS_PER_MINUTE;
+
+    if (bucket.count >= limit) {
         const waitMs = bucket.resetAt - Date.now();
-        logger.warn(`[RateLimit] User ${userId} exceeded limit. Wait ${waitMs}ms`);
+        logger.warn(`[RateLimit] User ${userId} exceeded limit (${bucket.count}/${limit}). Wait ${waitMs}ms`);
         throw new Error(`⏱ Rate limit atingido. Aguarde ${Math.ceil(waitMs / 1000)} segundos.`);
     }
     bucket.count++;
 }
+
 
 export async function withToolConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T> {
     // Simple semaphore

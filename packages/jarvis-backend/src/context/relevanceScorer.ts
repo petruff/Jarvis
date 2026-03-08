@@ -9,7 +9,9 @@ export interface ContextItem {
   createdAt: Date
   frequency?: number // how often referenced
   relatedTopics?: string[]
+  tokens?: number // token count for pruning
 }
+
 
 export interface RelevanceScore {
   itemId: string

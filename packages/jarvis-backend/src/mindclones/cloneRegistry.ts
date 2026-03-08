@@ -8,9 +8,7 @@
  * - Distributed cache (Redis) for fast lookup
  */
 
-import { Pool } from 'pg';
-import Redis from 'redis';
-import { MindClone, MindCloneDNA } from './types';
+import { MindClone, MindCloneDNA, RedisClient, Pool } from './types';
 
 export interface CloneRecord {
   id: string;
@@ -39,11 +37,11 @@ export interface CloneVersion {
 
 export class CloneRegistry {
   private db: Pool;
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
   private cachePrefix = 'clone:';
   private versionPrefix = 'clone-versions:';
 
-  constructor(db: Pool, cache: Redis.RedisClient) {
+  constructor(db: Pool, cache: RedisClient) {
     this.db = db;
     this.cache = cache;
   }
@@ -129,7 +127,7 @@ export class CloneRegistry {
     // Try cache first
     const cached = await this.cache.get(`${this.cachePrefix}${cloneId}`);
     if (cached) {
-      return JSON.parse(cached);
+      return JSON.parse(cached as string);
     }
 
     // Fallback to DB

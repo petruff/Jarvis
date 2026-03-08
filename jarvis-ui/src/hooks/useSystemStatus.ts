@@ -64,7 +64,7 @@ const MOCK_DATA: SystemData = {
 
 export const useSystemStatus = () => {
   const [data, setData] = useState<SystemData>(MOCK_DATA)
-  const [error, setError] = useState<string | null>(null)
+
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -90,5 +90,5 @@ export const useSystemStatus = () => {
     return () => clearInterval(interval)
   }, [])
 
-  return { data, error, loading }
+  return { data, loading }
 }

@@ -10,6 +10,15 @@ export interface ToolDef {
   inputs: Record<string, { type: string; required: boolean }>
   outputs: Record<string, string>
   estimatedDurationMs: number
+  parallelizable?: boolean
+}
+
+export type Tool = ToolDef;
+
+export interface DependencyGraph {
+  tools: Map<string, Tool>
+  dependencies: Dependency[]
+  circularDeps: string[][]
 }
 
 export interface Dependency {
@@ -31,12 +40,16 @@ export class DependencyAnalyzer {
   /**
    * Build dependency graph from tool definitions
    */
-  buildGraph(tools: ToolDef[]): Map<string, Dependency[]> {
-    const graph = new Map<string, Dependency[]>()
+  buildGraph(tools: Tool[]): DependencyGraph {
+    const depsMap = new Map<string, Dependency[]>()
+    const toolsMap = new Map<string, Tool>()
 
     for (const tool of tools) {
-      graph.set(tool.id, [])
+      depsMap.set(tool.id, [])
+      toolsMap.set(tool.id, tool)
     }
+
+    const dependencies: Dependency[] = []
 
     // Infer dependencies from input/output names
     for (const tool of tools) {
@@ -47,21 +60,25 @@ export class DependencyAnalyzer {
           // Check if another tool's output matches this tool's input
           for (const outputName of Object.keys(other.outputs)) {
             if (this.namesMatch(inputName, outputName)) {
-              const deps = graph.get(tool.id) || []
-              deps.push({
+              const dep: Dependency = {
                 from: other.id,
                 to: tool.id,
                 type: 'data',
                 required: inputDef.required
-              })
-              graph.set(tool.id, deps)
+              }
+              depsMap.get(tool.id)!.push(dep)
+              dependencies.push(dep)
             }
           }
         }
       }
     }
 
-    return graph
+    return {
+      tools: toolsMap,
+      dependencies,
+      circularDeps: this.detectCircularDeps(depsMap)
+    }
   }
 
   /**
@@ -124,14 +141,15 @@ export class DependencyAnalyzer {
   /**
    * Analyze a single tool's dependencies
    */
-  analyzeTool(toolId: string, graph: Map<string, Dependency[]>, tools: ToolDef[]): AnalysisResult {
-    const depth = this.calculateDepth(toolId, graph)
-    const deps = graph.get(toolId) || []
+  analyzeTool(toolId: string, graph: DependencyGraph): AnalysisResult {
+    const depsMap = this.getDepsMap(graph)
+    const depth = this.calculateDepth(toolId, depsMap)
+    const deps = depsMap.get(toolId) || []
 
     // Check if dependencies can run in parallel
     const canParallelize = !deps.some(d => d.type === 'temporal')
 
-    const circularDeps = this.detectCircularDeps(graph).filter(cycle =>
+    const circularDeps = graph.circularDeps.filter(cycle =>
       cycle.includes(toolId)
     )
 
@@ -142,6 +160,14 @@ export class DependencyAnalyzer {
       canParallelize,
       circularDeps: circularDeps.length > 0 ? circularDeps : undefined
     }
+  }
+
+  private getDepsMap(graph: DependencyGraph): Map<string, Dependency[]> {
+    const map = new Map<string, Dependency[]>()
+    for (const id of graph.tools.keys()) {
+      map.set(id, graph.dependencies.filter(d => d.to === id))
+    }
+    return map
   }
 
   /**

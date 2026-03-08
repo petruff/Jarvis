@@ -7,43 +7,45 @@ interface SystemStatusProps {
     onResetWhatsapp?: () => void;
     isTalkMode?: boolean;
     onToggleQR?: () => void;
+    socket?: any;
 }
 
-const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceState = 'IDLE', whatsappConnected = false, onResetWhatsapp, isTalkMode = false, onToggleQR }) => {
+const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceState = 'IDLE', whatsappConnected = false, onResetWhatsapp, isTalkMode = false, onToggleQR, socket }) => {
     const [cpuUsage, setCpuUsage] = useState(12);
     const [memUsage, setMemUsage] = useState(45);
     const [netPing, setNetPing] = useState(24);
+    const [serverCores, setServerCores] = useState<number | null>(null);
+    const [serverMemTotal, setServerMemTotal] = useState<number | null>(null);
 
-    // Provide real-time fluctuating data to make the HUD look alive
+    // Listen for real metrics from backend if socket is provided
     useEffect(() => {
-        const interval = setInterval(() => {
-            setCpuUsage(prev => {
-                const fluctuation = Math.floor(Math.random() * 15) - 5;
-                let next = prev + fluctuation;
-                if (next < 2) next = 2;
-                if (next > 98) next = 98;
-                return next;
-            });
+        if (!socket) {
+            // Fallback fake data if no socket
+            const interval = setInterval(() => {
+                setCpuUsage(prev => Math.min(98, Math.max(2, prev + Math.floor(Math.random() * 15) - 5)));
+                setMemUsage(prev => Math.min(85, Math.max(30, prev + Math.floor(Math.random() * 5) - 2)));
+                setNetPing(Math.floor(Math.random() * 15) + 15);
+            }, 1500);
+            return () => clearInterval(interval);
+        }
 
-            setMemUsage(prev => {
-                const fluctuation = Math.floor(Math.random() * 5) - 2;
-                let next = prev + fluctuation;
-                if (next < 30) next = 30;
-                if (next > 85) next = 85;
-                return next;
-            });
+        const handleMetrics = (data: { cpu: number, mem: number, ping: number, cores?: number, memTotal?: number }) => {
+            setCpuUsage(data.cpu);
+            setMemUsage(data.mem);
+            setNetPing(data.ping);
+            if (data.cores) setServerCores(data.cores);
+            if (data.memTotal) setServerMemTotal(data.memTotal);
+        };
 
-            setNetPing(() => {
-                const next = Math.floor(Math.random() * 15) + 15; // 15ms - 30ms
-                return next;
-            });
-        }, 1500);
-        return () => clearInterval(interval);
-    }, []);
+        socket.on('jarvis/system_metrics', handleMetrics);
+        return () => {
+            socket.off('jarvis/system_metrics', handleMetrics);
+        };
+    }, [socket]);
 
-    // Also get real local hardware config if available
-    const cores = navigator.hardwareConcurrency || 8;
-    const memTotal = (navigator as any).deviceMemory || 16;
+    // Also get real local hardware config if available as fallback
+    const cores = serverCores || navigator.hardwareConcurrency || 8;
+    const memTotal = serverMemTotal || (navigator as any).deviceMemory || 16;
 
     return (
         <div className="absolute top-8 right-8 flex flex-col items-end gap-2 font-mono text-xs z-20" role="status" aria-label="System Statistics">

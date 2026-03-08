@@ -1,3 +1,9 @@
+import { createClient } from 'redis';
+import { Pool } from 'pg';
+
+export type RedisClient = ReturnType<typeof createClient>;
+export { Pool };
+
 /**
  * Mind Clone Types — Data Structures for Expert AI Agents
  *
@@ -46,35 +52,45 @@ export interface ExpertEvidence {
 }
 
 /**
- * Mind Clone DNA — 5-Layer Expert Definition
+ * Mind Clone DNA — 5-Layer Expert Definition (Mega Brain Evolution)
  */
 export interface MindCloneDNA {
-  // Layer 1: Identity
+  // Layer 1: Identity & Philosophy
   expertName: string;
-  domain: string; // e.g., "Software Architecture", "UX Design"
+  domain: string;
   bio: string;
   expertise_level: 'novice' | 'intermediate' | 'expert' | 'master';
+  philosophy?: {
+    beliefs: string[];
+    alignment: {
+      moral_north: string;
+      voice: string;
+    };
+  };
 
   // Layer 2: Mental Models
-  mentalModels: ExpertPattern[]; // How they think
+  mentalModels: ExpertPattern[];
   problemSolvingApproach: string;
   decisionMakingStyle: 'analytical' | 'intuitive' | 'balanced' | 'creative';
 
-  // Layer 3: Decision Rules
-  decisionRules: DecisionRule[]; // How they decide
-  biases: string[]; // Known biases or preferences
-  blindSpots: string[]; // Known weaknesses
+  // Layer 3: Decision Rules & Heuristics
+  decisionRules: DecisionRule[];
+  heuristics?: string[]; // Mega Brain addition
+  biases: string[];
+  blindSpots: string[];
 
-  // Layer 4: Knowledge & Evidence
+  // Layer 4: Knowledge, Frameworks & Evidence
   coreBeliefs: string[];
+  frameworks?: Array<{ id: string; name: string; focus: string }>; // Mega Brain addition
   knowledgeBase: ExpertEvidence[];
-  lessons: string[]; // Lessons learned
+  lessons: string[];
 
-  // Layer 5: Personality
+  // Layer 5: Personality & Methodologies
   communicationStyle: string;
+  methodologies?: Array<{ id: string; focus: string }>; // Mega Brain addition
   valueHierarchy: string[];
-  trustFactors: string[]; // What they trust
-  suspicionFactors: string[]; // What they distrust
+  trustFactors: string[];
+  suspicionFactors: string[];
 }
 
 /**

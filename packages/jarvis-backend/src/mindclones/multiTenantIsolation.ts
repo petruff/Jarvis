@@ -8,8 +8,7 @@
  * - Cross-tenant audit logging
  */
 
-import { Pool } from 'pg';
-import Redis from 'redis';
+import { RedisClient, Pool } from './types';
 
 export interface Tenant {
   id: string;
@@ -45,9 +44,9 @@ export interface TenantAudit {
 
 export class MultiTenantIsolationManager {
   private db: Pool;
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
 
-  constructor(db: Pool, cache: Redis.RedisClient) {
+  constructor(db: Pool, cache: RedisClient) {
     this.db = db;
     this.cache = cache;
   }
@@ -203,7 +202,7 @@ export class MultiTenantIsolationManager {
     // Check cache first
     const cached = await this.cache.get(`tenant:${tenantId}`);
     if (cached) {
-      return JSON.parse(cached);
+      return JSON.parse(cached as string);
     }
 
     // Only allow if requesting own tenant

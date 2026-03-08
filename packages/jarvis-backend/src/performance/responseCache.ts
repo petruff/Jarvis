@@ -16,7 +16,7 @@ export interface CachedResponse {
 }
 
 export class ResponseCache {
-  private cache = new Map<string, CachedResponse>()
+  private store = new Map<string, CachedResponse>()
   private queryIndex = new Map<string, string[]>() // For similarity matching
   private readonly DEFAULT_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -27,16 +27,16 @@ export class ResponseCache {
     const normalized = this.normalize(query)
 
     // Exact match first
-    let cached = this.cache.get(normalized)
+    let cached = this.store.get(normalized)
     if (cached && this.isValid(cached)) {
       cached.hitCount++
       return cached
     }
 
     // Semantic similarity match
-    for (const [key, response] of this.cache) {
+    for (const [key, response] of this.store) {
       if (!this.isValid(response)) {
-        this.cache.delete(key)
+        this.store.delete(key)
         continue
       }
 
@@ -66,7 +66,7 @@ export class ResponseCache {
       hitCount: 0
     }
 
-    this.cache.set(normalized, cached)
+    this.store.set(normalized, cached)
     this.updateIndex(normalized, query)
 
     return cached
@@ -80,16 +80,16 @@ export class ResponseCache {
 
     if (!pattern) {
       // Clear all
-      removed = this.cache.size
-      this.cache.clear()
+      removed = this.store.size
+      this.store.clear()
       this.queryIndex.clear()
       return removed
     }
 
     // Remove matching pattern
-    for (const [key, response] of this.cache) {
+    for (const [key, response] of this.store) {
       if (key.includes(this.normalize(pattern))) {
-        this.cache.delete(key)
+        this.store.delete(key)
         removed++
       }
     }
@@ -104,7 +104,7 @@ export class ResponseCache {
     let totalHits = 0
     let validEntries = 0
 
-    for (const response of this.cache.values()) {
+    for (const response of this.store.values()) {
       if (this.isValid(response)) {
         validEntries++
         totalHits += response.hitCount
@@ -125,9 +125,9 @@ export class ResponseCache {
   cleanup(): number {
     let removed = 0
 
-    for (const [key, response] of this.cache) {
+    for (const [key, response] of this.store) {
       if (!this.isValid(response)) {
-        this.cache.delete(key)
+        this.store.delete(key)
         removed++
       }
     }

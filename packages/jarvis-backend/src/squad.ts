@@ -243,7 +243,10 @@ export async function runSquadPlan(
     const metrics = getAndResetTokenMetrics();
     const tokenStats = `\n\n**Mission Cost:** $${metrics.costUsd.toFixed(4)} USD (${metrics.promptTokens} prompt tokens, ${metrics.completionTokens} completion tokens)`;
 
-    const finalReport = `## Squad Plan Complete: ${narrative}\n\n${summary}${totalFiles.length > 0 ? `\n\n**Files Created:** ${totalFiles.map(f => path.basename(f)).join(', ')}` : ''}${tokenStats}`;
+    const finalReport = `## Squad Plan Complete: ${narrative}\n\n${summary}${totalFiles.length > 0 ? `\n\n**Files Created:** ${totalFiles.map(f => {
+        const relative = path.relative(path.resolve(process.cwd(), '../../workspace/deliverables'), f);
+        return relative.replace(/\\/g, '/'); // normalize for URL
+    }).join(', ')}` : ''}${tokenStats}`;
 
     console.log(`[Squad] Plan complete. ${results.length} agents, ${totalFiles.length} files. Cost: $${metrics.costUsd.toFixed(4)}`);
     io.emit('jarvis/output', { source: 'SQUAD', content: `✅ Squad plan complete. ${totalFiles.length} files created. Mission cost: $${metrics.costUsd.toFixed(4)}` });

@@ -16,7 +16,8 @@ import { PerformanceOptimizer } from './performanceOptimizer';
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import { Pool } from 'pg';
-import Redis from 'redis';
+import { RedisClient } from './types';
+import { dnaLoader } from '../intelligence/dnaLoader';
 
 export class MindCloneService {
   private extractor: any; // COMMENTED OUT: ExpertExtractor - pdf-parse dependency
@@ -26,7 +27,7 @@ export class MindCloneService {
   private coordinator: ConsensusCoordinator | null = null;
   private optimizer: PerformanceOptimizer | null = null;
 
-  constructor(db?: Pool, cache?: Redis.RedisClient) {
+  constructor(db?: Pool, cache?: RedisClient) {
     this.extractor = null; // COMMENTED OUT: new ExpertExtractor();
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -35,7 +36,7 @@ export class MindCloneService {
     // Initialize distributed components if DB and cache are provided (Phase 5)
     if (db && cache) {
       this.registry = new CloneRegistry(db, cache);
-      this.coordinator = new ConsensusCoordinator(this, cache);
+      this.coordinator = new ConsensusCoordinator(this, cache, db);
       this.optimizer = new PerformanceOptimizer(cache);
     }
   }
@@ -123,6 +124,10 @@ export class MindCloneService {
 
         // Use LLM to generate expert reasoning
         const startTime = Date.now();
+
+        // 🧬 Mega Brain Integration: Inject 5-layer DNA
+        const dnaFragment = await dnaLoader.injectDNA(clone.cloneId.split('-')[0]); // Use base name
+
         const response = await this.openai.chat.completions.create({
           model: 'gpt-4-turbo-preview',
           messages: [
@@ -134,6 +139,7 @@ Your expertise:
 - Approach: ${clone.dna.problemSolvingApproach}
 - Core beliefs: ${clone.dna.coreBeliefs.join(', ')}
 - Known biases: ${clone.dna.biases.join(', ')}
+${dnaFragment}
 
 Provide your expert analysis on the query.`,
             },

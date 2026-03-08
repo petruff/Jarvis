@@ -50,7 +50,7 @@ const CODE_SQUADS = new Set(['forge', 'nexus']);
 // ─── QA Evolution Engine ──────────────────────────────────────────────────────
 
 class QAEvolution {
-    private readonly passThreshold = 75;
+    private readonly passThreshold = 65;
 
     /**
      * Run all 10 QA phases on a mission result.

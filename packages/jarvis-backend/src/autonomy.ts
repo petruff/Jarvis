@@ -26,6 +26,7 @@ type SignalType =
     | 'goal_drift'          // Goals in RED / AMBER state
     | 'execution_friction'  // Repeated task failures or low quality scores
     | 'market_opportunity'  // Business-hours trigger for market intelligence
+    | 'daily_briefing'      // 8 AM morning briefing
     | 'competitor_shift'    // Weekly competitor monitoring
     | 'system_health';      // End-of-day operational review
 
@@ -47,6 +48,13 @@ interface MissionTemplate {
 }
 
 const MISSION_BANK: MissionTemplate[] = [
+    {
+        signal: 'daily_briefing',
+        name: 'Morning Executive Briefing',
+        prompt: 'Generate the daily market, technology, and execution briefing for the founders. Analyze the main technology trends from the last 24h and summarize them into 3 actionable bullet points.',
+        preferredSquad: 'oracle',
+        minIntervalHours: 20, // Daily
+    },
     {
         signal: 'market_opportunity',
         name: 'AI Market Intelligence Brief',
@@ -162,6 +170,29 @@ export class AutonomyEngine {
         this.state.lastTick = new Date();
 
         try {
+            // ── HTN LONG-HORIZON WAKE UP ────────────────────────────────────
+            try {
+                const { metaBrain } = require('./metaBrain');
+                const dags = metaBrain.getActiveDags();
+                for (const dag of dags) {
+                    if (dag.status === 'executing') {
+                        const hasAwake = dag.nodes.some((n: any) => n.status === 'suspended' && n.suspendUntil && new Date() > new Date(n.suspendUntil));
+                        if (hasAwake) {
+                            this.log(`[Autonomy] [HTN] Waking up DAG ${dag.id} from suspension`);
+                            const orchestratorFn = async (prompt: string, squadId: string, nodeId: string): Promise<string> => {
+                                if (!this.orchestrator) return "Orchestrator offline.";
+                                const res = await this.orchestrator.start({ prompt, squadId, source: 'autonomy', priority: 'HIGH' });
+                                return res.result || 'No result';
+                            };
+                            // Run asynchronously in background
+                            metaBrain.execute(dag.id, orchestratorFn).catch((e: any) => this.log(`HTN error: ${e.message}`));
+                        }
+                    }
+                }
+            } catch (err: any) {
+                this.log(`[Autonomy] HTN loop error: ${err.message}`);
+            }
+
             // ── 1. ORIENT ───────────────────────────────────────────────────
             this.log(`[Autonomy] [ORIENT] Cycle #${this.state.cycleCount}: Scanning system state...`);
 
@@ -229,6 +260,11 @@ export class AutonomyEngine {
         const isBusinessHours = day >= 1 && day <= 5 && hour >= 8 && hour <= 18;
         if (isBusinessHours) {
             signals.push({ type: 'market_opportunity', severity: 1 });
+        }
+
+        // Daily Briefing: every weekday at 8 AM
+        if (day >= 1 && day <= 5 && hour === 8) {
+            signals.push({ type: 'daily_briefing', severity: 2 });
         }
 
         // Competitor shift: Monday 9 AM only

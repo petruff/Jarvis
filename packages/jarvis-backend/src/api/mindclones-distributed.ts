@@ -14,16 +14,16 @@ import { CloneRegistry } from '../mindclones/cloneRegistry';
 import { ConsensusCoordinator } from '../mindclones/consensusCoordinator';
 import { PerformanceOptimizer } from '../mindclones/performanceOptimizer';
 import { Pool } from 'pg';
-import Redis from 'redis';
+import { RedisClient } from '../mindclones/types';
 
 export async function registerMindClonesDistributedRoutes(
   fastify: FastifyInstance,
   mindCloneService: MindCloneService,
   db: Pool,
-  cache: Redis.RedisClient
+  cache: RedisClient
 ) {
   const registry = new CloneRegistry(db, cache);
-  const coordinator = new ConsensusCoordinator(mindCloneService, cache);
+  const coordinator = new ConsensusCoordinator(mindCloneService, cache, db);
   const optimizer = new PerformanceOptimizer(cache);
 
   // Initialize registry schema

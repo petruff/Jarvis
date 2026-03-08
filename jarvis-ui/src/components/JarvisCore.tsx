@@ -8,8 +8,8 @@ interface JarvisCoreProps {
 const JarvisCore: React.FC<JarvisCoreProps> = ({ isSpeaking = false, isListening = false }) => {
     return (
         <div
-            className="relative flex items-center justify-center shrink-0"
-            style={{ width: 'clamp(14rem, 32vh, 26rem)', height: 'clamp(14rem, 32vh, 26rem)', minHeight: '14rem' }}
+            className="relative flex items-center justify-center shrink-0 max-w-full max-h-full"
+            style={{ width: '100%', height: '100%', aspectRatio: '1/1' }}
             aria-label="Jarvis Core Visualizer"
             role="img"
         >

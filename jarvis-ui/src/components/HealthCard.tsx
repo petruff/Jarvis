@@ -16,7 +16,7 @@ interface HealthCardProps {
   isLoading: boolean;
 }
 
-const HealthCard: React.FC<HealthCardProps> = ({ health, isLoading }) => {
+const HealthCard: React.FC<HealthCardProps> = ({ health }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'HEALTHY':

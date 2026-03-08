@@ -47,7 +47,7 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ metrics }) => {
         <div className="bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-700/50 rounded-lg p-6">
           <p className="text-slate-400 text-sm mb-2">Avg Query Time</p>
           <p className="text-3xl font-bold text-blue-400">{metrics.performance.avgQueryTime}</p>
-          <p className="text-xs text-slate-500 mt-2">Optimal: <500ms</p>
+          <p className="text-xs text-slate-500 mt-2">Optimal: &lt;500ms</p>
           {avgTimeValue < 500 ? (
             <p className="text-xs text-green-400 mt-1">✓ Performance good</p>
           ) : (
@@ -134,7 +134,6 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ metrics }) => {
 
         <div className="space-y-3">
           {metrics.loadMetrics.slice(0, 10).map((metric, idx) => {
-            const responseTime = parseInt(metric.responseTime);
             const successRateValue = parseFloat(metric.successRate);
 
             return (
@@ -151,13 +150,12 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ metrics }) => {
                 {/* Load Bar */}
                 <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all ${
-                      successRateValue >= 0.8
-                        ? 'bg-green-500'
-                        : successRateValue >= 0.6
-                          ? 'bg-yellow-500'
-                          : 'bg-red-500'
-                    }`}
+                    className={`h-full transition-all ${successRateValue >= 0.8
+                      ? 'bg-green-500'
+                      : successRateValue >= 0.6
+                        ? 'bg-yellow-500'
+                        : 'bg-red-500'
+                      }`}
                     style={{ width: `${successRateValue * 100}%` }}
                   ></div>
                 </div>

@@ -14,7 +14,6 @@ export const CircuitBreaker: React.FC<CircuitBreakerProps> = ({
   maxCostUsd
 }) => {
   const callsPercentage = (calls / maxCalls) * 100
-  const costPercentage = (costUsd / maxCostUsd) * 100
   const isWarning = callsPercentage > 80
 
   return (
@@ -22,8 +21,8 @@ export const CircuitBreaker: React.FC<CircuitBreakerProps> = ({
       <div className="breaker-stat">
         <label>API Calls</label>
         <div className={`progress-bar ${isWarning ? 'warning' : ''}`}>
-          <div 
-            className="progress-fill" 
+          <div
+            className="progress-fill"
             style={{ width: `${callsPercentage}%` }}
           />
         </div>

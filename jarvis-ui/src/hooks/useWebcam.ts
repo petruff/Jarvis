@@ -63,6 +63,7 @@ export const useWebcam = (apiHost: string = `http://${window.location.hostname}:
                 console.log('[useWebcam] Webcam started');
                 return true;
             }
+            return false;
         } catch (error) {
             console.error('[useWebcam] Webcam access error:', error);
             return false;

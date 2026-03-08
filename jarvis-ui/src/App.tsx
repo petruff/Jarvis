@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import JarvisCore from './components/JarvisCore';
+import AgiCore from './components/AgiCore';
+import SystemTelemetry from './components/SystemTelemetry';
 import CommandInput from './components/CommandInput';
 import AgentSelector from './components/AgentSelector';
 import OutputStream from './components/OutputStream';
@@ -17,7 +18,7 @@ import LeftPanel from './components/LeftPanel';
 import RightPanel from './components/RightPanel';
 
 function App() {
-    const { voiceState, transcript, speak, lastResponse, logs, sendCommand, startJarvis, stopJarvis, socket, isConnected, isTalkMode } = useJarvisVoice();
+    const { voiceState, transcript, speak, lastResponse, logs, sendCommand, startJarvis, stopJarvis, socket, isConnected, isTalkMode, recognitionLanguage, toggleLanguage } = useJarvisVoice();
     const { user } = useUserRecognition();
     const [selectedAgent, setSelectedAgent] = useState('jarvis');
     const [showDashboard, setShowDashboard] = useState(false);
@@ -108,6 +109,9 @@ function App() {
 
 
 
+            {/* Cinematic Scanner Overlay */}
+            <div className="scanner-line"></div>
+
             {/* Background Radial & Grid Mesh */}
             <div className="fixed inset-0 bg-[#070b14] z-[-2]"></div>
             <div className="fixed inset-0 bg-[radial-gradient(circle_at_center,rgba(0,243,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)] pointer-events-none z-[-1] mix-blend-screen overflow-hidden"></div>
@@ -126,6 +130,7 @@ function App() {
                 onResetWhatsapp={handleResetWhatsApp}
                 isTalkMode={isTalkMode}
                 onToggleQR={() => setShowQRModal(!showQRModal)}
+                socket={socket}
             />
 
             {/* Header */}
@@ -138,21 +143,26 @@ function App() {
                 </p>
             </header>
 
+            {/* Hyper-Presence Overlay (Telemetry) */}
+            <div className="fixed top-6 right-6 z-50 pointer-events-none text-white">
+                <SystemTelemetry socket={socket as any} />
+            </div>
+
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto relative z-10 px-4 pt-4 pb-2 h-full overflow-hidden">
+            <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto relative z-10 px-4 pt-2 pb-4 h-full overflow-hidden">
 
                 {/* Top Section: Flexible Arc Container */}
-                <div className="flex-1 flex items-center justify-center relative w-full min-h-[30vh] pointer-events-none overflow-visible">
+                <div className="flex-1 flex flex-col items-center justify-center relative w-full min-h-0 pointer-events-none overflow-visible mb-2 mt-2">
                     <ConnectorLines />
 
-                    {/* Central Visualizer - Self-Scaling via CSS Clamp */}
-                    <div className={`transition-transform duration-500 z-0 opacity-90 ${voiceState === 'LISTENING' ? 'scale-110' : 'scale-100'}`}>
-                        <JarvisCore isSpeaking={voiceState === 'SPEAKING'} isListening={voiceState === 'LISTENING'} />
+                    {/* Central Visualizer - Scalable */}
+                    <div className={`transition-transform duration-500 z-0 opacity-90 w-full h-full max-h-[350px] flex items-center justify-center ${voiceState === 'LISTENING' ? 'scale-110' : 'scale-100'}`}>
+                        <AgiCore socket={socket as any} active={true} />
                     </div>
                 </div>
 
                 {/* Bottom Section: Control Deck & Info Bar */}
-                <div className="w-full max-w-3xl mx-auto flex flex-col gap-3 z-20 pointer-events-auto shrink-0 justify-end pb-2">
+                <div className="w-full max-w-3xl mx-auto flex flex-col gap-3 z-20 pointer-events-auto shrink-0 justify-end">
 
                     {/* Info Bar / Stats */}
                     <div className="w-full flex items-center justify-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider">
@@ -173,6 +183,14 @@ function App() {
                         >
                             [{showStrategy ? 'CLOSE PLAN' : '🚀 V5 PLAN'}]
                         </button>
+                        {!whatsappConnected && !showQRModal && (
+                            <button
+                                onClick={() => setShowQRModal(true)}
+                                className="hover:text-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.8)] text-emerald-500 transition-all duration-300 cursor-pointer border border-emerald-500/30 px-3 py-1 bg-emerald-500/10 rounded backdrop-blur-sm animate-pulse"
+                            >
+                                [WHATSAPP QR]
+                            </button>
+                        )}
 
                         <div className="hidden sm:block flex-1 h-px bg-jarvis-primary/20"></div>
                         <span className="hidden sm:inline">PROTOCOL — ACTIVE</span>
@@ -187,6 +205,13 @@ function App() {
                     {/* Agent Selector Buttons */}
                     <div className="w-full flex items-center gap-2 mt-1">
                         <AgentSelector selectedAgent={selectedAgent} onSelect={handleAgentSelect} />
+                        <button
+                            onClick={toggleLanguage}
+                            className="bg-jarvis-primary/10 border border-jarvis-primary/30 text-jarvis-primary hover:bg-jarvis-primary/20 px-3 py-2 rounded text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap"
+                            title="Toggle Voice Language"
+                        >
+                            {recognitionLanguage === 'pt-BR' ? '🇧🇷 PT' : '🇺🇸 EN'}
+                        </button>
                         <button
                             onClick={() => speak("Voice systems calibrated. Ready for instruction.")}
                             className="bg-jarvis-primary/10 border border-jarvis-primary/30 text-jarvis-primary hover:bg-jarvis-primary/20 px-3 py-2 rounded text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap"

@@ -10,8 +10,7 @@
  */
 
 import { MindCloneService } from './mindCloneService';
-import { ExpertInsight, ConsensusDecision, ConsensusProfile } from './types';
-import Redis from 'redis';
+import { ExpertInsight, ConsensusDecision, ConsensusProfile, RedisClient, Pool } from './types';
 
 export interface CloneLoadMetrics {
   cloneId: string;
@@ -32,15 +31,17 @@ export interface ConsensusOption {
 
 export class ConsensusCoordinator {
   private mindCloneService: MindCloneService;
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
+  private db: Pool;
   private metrics: Map<string, CloneLoadMetrics> = new Map();
   private circuitBreaker: Map<string, { failures: number; reset: number }> = new Map();
   private readonly MAX_FAILURES = 3;
   private readonly CIRCUIT_RESET_MS = 60000; // 1 minute
 
-  constructor(mindCloneService: MindCloneService, cache: Redis.RedisClient) {
+  constructor(mindCloneService: MindCloneService, cache: RedisClient, db: Pool) {
     this.mindCloneService = mindCloneService;
     this.cache = cache;
+    this.db = db;
   }
 
   /**
@@ -224,12 +225,12 @@ export class ConsensusCoordinator {
     await this.cache.xAdd(
       'consensus-metrics',
       '*',
-      JSON.stringify(metric)
+      metric as any
     );
 
     // Keep last 1000 metrics in memory
     const existing = await this.cache.get('consensus-metrics-last');
-    const metrics = existing ? JSON.parse(existing) : [];
+    const metrics = existing ? JSON.parse(existing as string) : [];
     metrics.push(metric);
     if (metrics.length > 1000) metrics.shift();
     await this.cache.set('consensus-metrics-last', JSON.stringify(metrics));

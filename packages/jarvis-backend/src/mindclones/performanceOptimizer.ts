@@ -9,8 +9,7 @@
  * - Performance metrics collection
  */
 
-import Redis from 'redis';
-import { ExpertInsight, ConsensusDecision } from './types';
+import { ExpertInsight, ConsensusDecision, RedisClient } from './types';
 
 export interface CacheEntry<T> {
   data: T;
@@ -39,7 +38,7 @@ export interface PerformanceStats {
 }
 
 export class PerformanceOptimizer {
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
   private localCache: Map<string, CacheEntry<any>> = new Map();
   private inFlightRequests: Map<string, Promise<any>> = new Map();
   private stats = {
@@ -53,7 +52,7 @@ export class PerformanceOptimizer {
   private readonly LOCAL_CACHE_TTL = 300; // 5 minutes
   private readonly REDIS_CACHE_TTL = 3600; // 1 hour
 
-  constructor(cache: Redis.RedisClient) {
+  constructor(cache: RedisClient) {
     this.cache = cache;
     this.startCacheCleanup();
   }
@@ -76,7 +75,7 @@ export class PerformanceOptimizer {
     const redisEntry = await this.cache.get(`insight:${cacheKey}`);
     if (redisEntry) {
       try {
-        const data = JSON.parse(redisEntry);
+        const data = JSON.parse(redisEntry as string);
         // Refresh local cache
         this.localCache.set(cacheKey, {
           data,
@@ -283,6 +282,13 @@ export class PerformanceOptimizer {
   recordQueryTime(duration: number): void {
     this.stats.totalQueries++;
     this.stats.totalQueryTime += duration;
+  }
+
+  /**
+   * Get load metrics (mock implementation for now)
+   */
+  getLoadMetrics(): any[] {
+    return [];
   }
 
   /**

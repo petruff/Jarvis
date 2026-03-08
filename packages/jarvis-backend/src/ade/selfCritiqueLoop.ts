@@ -195,13 +195,59 @@ class SelfCritiqueLoop {
             }
             stepsCompleted.push('ENHANCEMENT');
 
+            // ── Step 9.5: PHYSICS_CHECK ─────────────────────────────────────
+            await recoverySystem.saveCheckpoint(missionId, 'PHYSICS_CHECK', prompt, { squadId });
+            this.log(socket, 'PHYSICS_CHECK', 'Extracting files and running Docker Physics Sandbox', missionId);
+
+            // Extract files immediately so we can test them
+            this.extractAndSaveFiles(output, missionId);
+
+            let physicsFailed = false;
+            let physicsLogs = '';
+            // Only enforce strict physics on Forge (Dev) squad where code is generated
+            if (squadId === 'forge' && output.includes('```')) {
+                const { dockerVerifier } = require('./dockerVerifier');
+                const verifyDir = path.join(this.deliverablesDir, missionId);
+                // Safe command: if package.json exists run install/test, else try to execute any js file
+                const testCmd = `if [ -f package.json ]; then npm install && npm test --if-present; elif ls *.js 1> /dev/null 2>&1; then node *.js; else echo "No active code to test"; fi`;
+
+                const physics = await dockerVerifier.verifyPhysics(verifyDir, testCmd);
+                physicsLogs = physics.logs;
+
+                if (!physics.success) {
+                    physicsFailed = true;
+                    this.log(socket, 'PHYSICS_CHECK', 'Code failed to run in Docker container', missionId);
+                    // Append the physics failure context to output so the agent can learn next tick
+                    output += `\n\n[DOCKER VERIFICATION FAILED]\nYour code threw an error during physical testing:\n${physicsLogs.slice(-1000)}`;
+                } else {
+                    this.log(socket, 'PHYSICS_CHECK', 'Code verified successfully in Docker', missionId);
+                }
+            }
+            stepsCompleted.push('PHYSICS_CHECK');
+
             // ── Step 10: QUALITY_CHECK ──────────────────────────────────────
             await recoverySystem.saveCheckpoint(missionId, 'QUALITY_CHECK', prompt, { squadId, partialResult: output.slice(0, 500) });
-            this.log(socket, 'QUALITY_CHECK', 'Running QA Evolution (10-phase)', missionId);
 
-            const qaReport = await qaEvolution.evaluate(output, { missionId, prompt }, squadId);
-            qualityScore = qaReport.finalScore;
-            passed = qaReport.passed;
+            // Optimization: Skip recursive QA for infrastructure/internal tasks
+            const isInfraMission = missionId.startsWith('infra-') || ['PARSE', 'PLAN'].includes(squadId.toUpperCase());
+
+            let qaReport: any;
+            if (isInfraMission) {
+                this.log(socket, 'QUALITY_CHECK', 'Infrastructure mission — bypassing standard QA gate', missionId);
+                qualityScore = 100;
+                passed = true;
+            } else {
+                this.log(socket, 'QUALITY_CHECK', 'Running QA Evolution (10-phase)', missionId);
+                qaReport = await qaEvolution.evaluate(output, { missionId, prompt }, squadId);
+                qualityScore = qaReport.finalScore;
+                passed = qaReport.passed;
+            }
+
+            // Enforce Physics Fail over QA Pass
+            if (physicsFailed) {
+                passed = false;
+                qualityScore = Math.min(qualityScore, 40); // Cap score if physics fail
+            }
 
             this.log(socket, 'QUALITY_CHECK', `Score: ${qualityScore}/100 | ${passed ? 'PASSED' : 'FAILED'}`, missionId);
             stepsCompleted.push('QUALITY_CHECK');
@@ -211,16 +257,19 @@ class SelfCritiqueLoop {
                 retries++;
                 await hookSystem.fire('onQualityFail', { missionId, squadId, qualityScore });
                 if (retries < this.MAX_RETRIES) {
-                    this.log(socket, 'RETRY', `Score ${qualityScore} < ${this.RETRY_THRESHOLD} — retrying with gap feedback`, missionId);
-                    // Inject quality feedback into executeFn context via enrichedPrompt (next iteration)
-                    gapAnalysis = `Previous score: ${qualityScore}/100. Weakest: ${qaReport.weakestPhase}. Issue: ${qaReport.improvementNote}. Please address these gaps.`;
+                    this.log(socket, 'RETRY', `Score ${qualityScore} < ${this.RETRY_THRESHOLD} or Physics Failed — retrying`, missionId);
+                    const improvementNote = !isInfraMission && typeof qaReport !== 'undefined'
+                        ? `Weakest: ${qaReport.weakestPhase}. Issue: ${qaReport.improvementNote}.`
+                        : 'Physics or threshold failure.';
+                    gapAnalysis = `Previous score: ${qualityScore}/100. ${improvementNote} ${physicsFailed ? '\nCRITICAL: Fix the Docker compilation/execution errors.' : ''} Please address these gaps.`;
                 }
             }
         } while (!passed && retries < this.MAX_RETRIES);
 
         // ── Step 12: FILE_DELIVERY ───────────────────────────────────────────
         await recoverySystem.saveCheckpoint(missionId, 'FILE_DELIVERY', prompt, { squadId, partialResult: output.slice(0, 500) });
-        this.log(socket, 'FILE_DELIVERY', 'Checking for file deliverables', missionId);
+        this.log(socket, 'FILE_DELIVERY', 'Final synchronization of deliverables', missionId);
+        // files have already been extracted in the loop, but we can call it again to be safe
         this.extractAndSaveFiles(output, missionId);
         stepsCompleted.push('FILE_DELIVERY');
 

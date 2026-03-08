@@ -11,6 +11,7 @@
 import ElevenLabsClient from './elevenLabsClient';
 import ProsodyEngine, { Emotion, VoicePersonality } from './prosodyEngine';
 import { StreamingHandler, StreamChunkQueue } from './streamingHandler';
+import { LanguageDetector } from './languageDetector';
 import { Socket } from 'socket.io';
 
 interface VoiceServiceConfig {
@@ -55,18 +56,23 @@ class VoiceService {
      */
     async synthesize(text: string): Promise<string> {
         try {
+            // Detect language automatically
+            const language = LanguageDetector.detect(text);
+
             // Analyze text for emotion
             const analysis = this.prosodyEngine.analyzeSpeech(text, this.personality);
 
             console.log('[VoiceService] Analyzing speech', {
-                emotion: analysis.emotion,
-                confidence: analysis.confidence.toFixed(2),
+                text: text.substring(0, 30) + '...',
+                lang: language,
+                emotion: analysis.emotion
             });
 
-            // Generate audio with emotion-aware voice
+            // Generate audio with language and emotion awareness
             const audioBuffer = await this.ttsClient.synthesize(
                 text,
-                this.enableProsody ? analysis.emotion : undefined
+                this.enableProsody ? analysis.emotion : undefined,
+                language
             );
 
             // Return base64 for transmission

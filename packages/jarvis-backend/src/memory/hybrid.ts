@@ -10,6 +10,7 @@ const VECTOR_SIZE = 1536; // OpenAI text-embedding-3-small size
 export interface DocumentChunk {
     id: string;
     text: string;
+    bucket: 'PERSONAL' | 'WORKSPACE' | 'KNOWLEDGE';
     metadata: Record<string, any>;
 }
 
@@ -45,11 +46,12 @@ export class HybridMemory {
                         vector: dummyVector,
                         text: '',
                         docId: '',
+                        bucket: 'KNOWLEDGE',
                         chunkIndex: 0
                     }
                 ]);
                 await this.table.delete("id = 'schema_init_id'");
-                console.log(`[HybridMemory] LanceDB Online. Knowledge collection initialized.`);
+                console.log(`[HybridMemory] LanceDB Online. Knowledge collection initialized with bucket partitioning.`);
             }
         } catch (error: any) {
             console.error(`[HybridMemory] Initialization failed.`, error.message);
@@ -89,9 +91,9 @@ export class HybridMemory {
     /**
      * Ingests a large document, splits it, embeds it, and stores it into LanceDB
      */
-    async encodeDocument(docId: string, text: string, metadata: Record<string, any> = {}): Promise<void> {
+    async encodeDocument(docId: string, text: string, bucket: 'PERSONAL' | 'WORKSPACE' | 'KNOWLEDGE' = 'WORKSPACE', metadata: Record<string, any> = {}): Promise<void> {
         if (!this.table) throw new Error('LanceDB table offline.');
-        console.log(`[HybridMemory] Encoding document ${docId}...`);
+        console.log(`[HybridMemory] Encoding document ${docId} into bucket ${bucket}...`);
 
         const chunks = this.chunkText(text);
         const embeddings = await Promise.all(chunks.map(c => this.embed(c)));
@@ -101,6 +103,7 @@ export class HybridMemory {
             vector: embeddings[i],
             text: chunk,
             docId: docId,
+            bucket: bucket,
             chunkIndex: i
         }));
 
@@ -112,21 +115,29 @@ export class HybridMemory {
         }
 
         await this.table.add(records);
-        console.log(`[HybridMemory] Successfully encoded ${chunks.length} chunks into knowledge base.`);
+        console.log(`[HybridMemory] Successfully encoded ${chunks.length} chunks into [${bucket}] knowledge base.`);
     }
 
     /**
-     * Search the knowledge base for semantic similarities
+     * Search the knowledge base for semantic similarities, optionally filtered by bucket
      */
-    async searchKnowledge(query: string, nResults: number = 3): Promise<DocumentChunk[]> {
+    async searchKnowledge(query: string, nResults: number = 3, bucket?: 'PERSONAL' | 'WORKSPACE' | 'KNOWLEDGE'): Promise<DocumentChunk[]> {
         if (!this.table) throw new Error('LanceDB table offline.');
 
         const queryEmbedding = await this.embed(query);
-        const results = await this.table.search(queryEmbedding).limit(nResults).execute();
+        let search = this.table.search(queryEmbedding);
+
+        if (bucket) {
+            console.log(`[HybridMemory] Filtering search for bucket: ${bucket}`);
+            search = search.where(`bucket = '${bucket}'`);
+        }
+
+        const results = await search.limit(nResults).execute();
 
         return results.map((res: any) => ({
             id: res.id,
             text: res.text,
+            bucket: res.bucket,
             metadata: {
                 docId: res.docId,
                 chunkIndex: res.chunkIndex,

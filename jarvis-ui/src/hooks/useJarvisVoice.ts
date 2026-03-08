@@ -15,6 +15,8 @@ interface UseJarvisVoiceReturn {
     sendCommand: (text: string, agentId?: string) => void;
     socket: Socket | null;
     isTalkMode: boolean;
+    recognitionLanguage: 'pt-BR' | 'en-US';
+    toggleLanguage: () => void;
 }
 
 export const useJarvisVoice = (): UseJarvisVoiceReturn => {
@@ -370,13 +372,27 @@ export const useJarvisVoice = (): UseJarvisVoiceReturn => {
                     addLog('MIC', '🎙️ Wake word detected');
                 }
             } else if (voiceStateRef.current === 'LISTENING') {
+                // Command to switch language explicitly on the frontend to avoid getting lost
+                if (text.includes('mudar para inglês') || text.includes('switch to english')) {
+                    setRecognitionLanguage('en-US');
+                    addLog('SYSTEM', '🌍 Language switched to en-US');
+                    speak('Switched to English');
+                    return;
+                }
+                if (text.includes('mudar para português') || text.includes('switch to portuguese')) {
+                    setRecognitionLanguage('pt-BR');
+                    addLog('SYSTEM', '🌍 Language switched to pt-BR');
+                    speak('Modificado para o Português');
+                    return;
+                }
+
                 if (silenceTimer.current) clearTimeout(silenceTimer.current);
                 silenceTimer.current = setTimeout(() => {
                     if (event.results[idx].isFinal) {
                         console.log('[Command] Final:', text);
                         sendCommandRef.current(text);
                     }
-                }, 1500);
+                }, 200); // Drastically reduced latency from 400ms to 200ms for instant responses
             }
         };
 
@@ -492,6 +508,17 @@ export const useJarvisVoice = (): UseJarvisVoiceReturn => {
         }
     }, []);
 
+    const toggleLanguage = useCallback(() => {
+        setRecognitionLanguage(prev => {
+            const newLang = prev === 'pt-BR' ? 'en-US' : 'pt-BR';
+            // Stop recognition so it restarts immediately with the new language on the next cycle
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+            return newLang;
+        });
+    }, []);
+
     return {
         voiceState,
         transcript,
@@ -503,6 +530,8 @@ export const useJarvisVoice = (): UseJarvisVoiceReturn => {
         speak,
         sendCommand,
         socket: socketRef.current,
-        isTalkMode
+        isTalkMode,
+        recognitionLanguage,
+        toggleLanguage
     };
 };

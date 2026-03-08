@@ -7,7 +7,8 @@
  * - Hybrid keyword + semantic search
  */
 
-import lancedb, { DBConnection, Table } from 'lancedb';
+import * as lancedb from 'vectordb';
+import { Connection, Table } from 'vectordb';
 import { DocumentChunk } from './documentProcessor';
 import Fuse from 'fuse.js';
 
@@ -18,7 +19,7 @@ export interface SearchResult {
 }
 
 export class VectorStore {
-  private db: DBConnection;
+  private db: any;
   private table: Table | null = null;
   private keyword_index: Fuse<DocumentChunk> | null = null;
   private chunks: Map<string, DocumentChunk> = new Map();
@@ -102,7 +103,7 @@ export class VectorStore {
         query = query.where(`title = '${filters.title}'`);
       }
 
-      const results = await query.limit(topK).toArray() as any[];
+      const results = await query.limit(topK).execute();
 
       return results.map((result: any) => ({
         chunk: {

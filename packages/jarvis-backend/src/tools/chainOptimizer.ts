@@ -3,16 +3,19 @@
  */
 
 import { v4 as uuidv4 } from 'uuid'
-import { ToolDef, Dependency } from './dependencyAnalyzer'
+import { ToolDef, Dependency, DependencyGraph } from './dependencyAnalyzer'
 
 export interface OptimizedChain {
   id: string
   originalSequence: string[]
-  optimizedSequence: string[]
+  optimized: string[]
   originalSteps: number
   optimizedSteps: number
   stepReduction: number
   estimatedTimeSavings: number
+  estimatedTimeOriginal: number
+  estimatedTimeOptimized: number
+  timeImprovement: number
   executionGroups: string[][]
 }
 
@@ -29,31 +32,67 @@ export class ChainOptimizer {
    */
   optimizeChain(
     toolSequence: string[],
-    graph: Map<string, Dependency[]>,
-    tools: Map<string, ToolDef>
+    graph: DependencyGraph
   ): OptimizedChain {
+    const toolsMap = graph.tools
+    const depsMap = this.getDepsMap(graph)
+
     // Step 1: Remove redundant tools
     const deduplicated = this.deduplicateSequence(toolSequence)
 
     // Step 2: Topological sort for optimal order
-    const optimized = this.topologicalSort(deduplicated, graph)
+    const optimized = this.topologicalSort(deduplicated, depsMap)
 
     // Step 3: Group independent tools for parallelization
-    const groups = this.groupForParallelization(optimized, graph)
+    const groups = this.groupForParallelization(optimized, depsMap)
 
     const flatOptimized = groups.flat()
-    const stepReduction = (1 - flatOptimized.length / deduplicated.length) * 100
+    const stepReduction = deduplicated.length > 0 ? (1 - flatOptimized.length / deduplicated.length) * 100 : 0
+
+    const originalTime = this.estimateTimeSavings(toolSequence, toolSequence, toolsMap) // Wait, this just returns originalTime
+    // Actually, I need to fix estimateTimeSavings logic or just return the values directly.
+
+    let originalTotalTime = 0
+    for (const id of toolSequence) originalTotalTime += graph.tools.get(id)?.estimatedDurationMs || 0
+
+    let optimizedTotalTime = 0
+    for (const group of groups) {
+      let maxInGroup = 0
+      for (const id of group) maxInGroup = Math.max(maxInGroup, graph.tools.get(id)?.estimatedDurationMs || 0)
+      optimizedTotalTime += maxInGroup
+    }
+
+    const timeSavings = originalTotalTime - optimizedTotalTime
+    const timeImprovement = originalTotalTime > 0 ? (timeSavings / originalTotalTime) * 100 : 0
 
     return {
       id: uuidv4(),
       originalSequence: toolSequence,
-      optimizedSequence: flatOptimized,
+      optimized: flatOptimized,
       originalSteps: toolSequence.length,
       optimizedSteps: flatOptimized.length,
       stepReduction,
-      estimatedTimeSavings: this.estimateTimeSavings(toolSequence, flatOptimized, tools),
+      estimatedTimeSavings: timeSavings,
+      estimatedTimeOriginal: originalTotalTime,
+      estimatedTimeOptimized: optimizedTotalTime,
+      timeImprovement,
       executionGroups: groups
     }
+  }
+
+  private getDepsMap(graph: DependencyGraph): Map<string, Dependency[]> {
+    const map = new Map<string, Dependency[]>()
+    for (const id of graph.tools.keys()) {
+      map.set(id, graph.dependencies.filter(d => d.to === id))
+    }
+    return map
+  }
+
+  /**
+   * Get parallel execution opportunities
+   */
+  getParallelOpportunities(toolIds: string[], graph: DependencyGraph): string[][] {
+    return this.groupForParallelization(toolIds, this.getDepsMap(graph)).filter(group => group.length > 1)
   }
 
   /**

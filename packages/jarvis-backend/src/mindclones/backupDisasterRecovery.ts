@@ -9,8 +9,7 @@
  * - Recovery time objective (RTO) and recovery point objective (RPO) tracking
  */
 
-import { Pool } from 'pg';
-import Redis from 'redis';
+import { RedisClient, Pool } from './types';
 import * as cron from 'node-cron';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -62,13 +61,13 @@ export interface RecoveryPlan {
 
 export class BackupDisasterRecoveryManager {
   private db: Pool;
-  private cache: Redis.RedisClient;
+  private cache: RedisClient;
   private backupSchedule: cron.ScheduledTask | null = null;
   private config: BackupConfig;
 
   constructor(
     db: Pool,
-    cache: Redis.RedisClient,
+    cache: RedisClient,
     config: BackupConfig
   ) {
     this.db = db;

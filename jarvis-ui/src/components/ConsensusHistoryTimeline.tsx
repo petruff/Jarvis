@@ -132,11 +132,10 @@ export const ConsensusHistoryTimeline: React.FC<ConsensusHistoryTimelineProps> =
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`px-4 py-2 rounded font-semibold transition ${
-              period === p
+            className={`px-4 py-2 rounded font-semibold transition ${period === p
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
+              }`}
           >
             {p === '1d' ? 'Last 24h' : p === '7d' ? 'Last 7d' : 'Last 30d'}
           </button>
@@ -250,7 +249,7 @@ export const ConsensusHistoryTimeline: React.FC<ConsensusHistoryTimelineProps> =
         </div>
       ) : filteredDecisions.length > 0 ? (
         <div className="space-y-4">
-          {filteredDecisions.map((decision, idx) => (
+          {filteredDecisions.map((decision) => (
             <div
               key={decision.id}
               onClick={() => setSelectedDecision(decision)}

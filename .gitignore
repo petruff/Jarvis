@@ -415,3 +415,7 @@ packages/jarvis-backend/test_audio.ts
 # Agent task output folder (runtime artifacts, not source code)
 packages/jarvis-backend/output/
 
+# Project-level data and logs
+data/
+backend_logs.txt
+

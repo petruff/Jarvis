@@ -65,11 +65,36 @@ class MissionControl {
     }
 
     /**
+     * Launch a mission autonomously from internal cognitive triggers.
+     */
+    async launchAutonomousMission(squadId: string, objective: string, priority: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM'): Promise<string> {
+        const missionId = `auto_${Date.now()}`;
+        console.log(`🚀 [MISSION CONTROL] Launching Autonomous Mission: ${missionId} (${squadId})`);
+
+        const { agentBus } = require('./agent-bus/redis-streams');
+        const crypto = require('crypto');
+
+        await agentBus.publish({
+            fromSquad: 'autonomy',
+            fromAgent: 'visual-cortex',
+            toSquad: squadId,
+            type: 'AUTONOMOUS_ACTION',
+            payload: `[VISION TRIGGERED MISSION]\n${objective}`,
+            mission: objective,
+            priority,
+            correlationId: crypto.randomUUID()
+        });
+
+        return missionId;
+    }
+
+    /**
      * Unregister a listener.
      */
     removeStopListener(listener: () => void): void {
         this.stopListeners.delete(listener);
     }
 }
+
 
 export const missionControl = new MissionControl();

@@ -259,6 +259,19 @@ const TaskCard: React.FC<{ task: QueuedTask; onExpand: () => void; expanded: boo
                 <span className="text-[10px] font-bold tracking-wide" style={{ color }}>{task.squad}</span>
                 <span className="text-[8px] px-1.5 py-0.5 rounded border" style={{ color: meta.color, borderColor: meta.color + '50' }}>{meta.label}</span>
                 <span className="text-[8px] px-1.5 py-0.5 rounded border" style={{ color: PRIORITY_COLOR[task.priority], borderColor: PRIORITY_COLOR[task.priority] + '50' }}>{task.priority}</span>
+                {(() => {
+                    if (!task.result) return null;
+                    const match = task.result.match(/\*\*Mission Cost:\*\* \$([0-9.]+) USD/);
+                    if (match) {
+                        const cost = parseFloat(match[1]);
+                        return (
+                            <span className={`text-[8px] px-1.5 py-0.5 rounded border font-mono ${cost > 0.05 ? 'text-amber-400 border-amber-400/50' : 'text-green-400 border-green-400/50'}`}>
+                                ${cost.toFixed(4)}
+                            </span>
+                        );
+                    }
+                    return null;
+                })()}
                 <span className="text-[8px] text-white/40 ml-auto">{src.icon} {src.label}</span>
             </div>
             <p className="text-[11px] text-white/80 font-medium leading-tight">{task.title}</p>
@@ -268,8 +281,30 @@ const TaskCard: React.FC<{ task: QueuedTask; onExpand: () => void; expanded: boo
             </p>
 
             {expanded && task.result && (
-                <div className="mt-2 pt-2 border-t border-white/10">
+                <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
                     <p className="text-[9px] text-white/60 whitespace-pre-wrap max-h-40 overflow-y-auto">{task.result.slice(0, 600)}{task.result.length > 600 ? '…' : ''}</p>
+                    {(() => {
+                        const match = task.result.match(/\*\*Files Created:\*\* (.*)/);
+                        if (!match) return null;
+                        const files = match[1].split(',').map(f => f.trim().split(/\s+/)[0]); // some string cleanup
+                        return (
+                            <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
+                                {files.map(f => (
+                                    <button
+                                        key={f}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.open(`http://localhost:3000/api/workspace/files?file=${encodeURIComponent(f)}`, '_blank');
+                                        }}
+                                        className="text-[9px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-1 rounded hover:bg-blue-500/30 transition-colors flex items-center gap-1"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                        Ver {f.split('/').pop()}
+                                    </button>
+                                ))}
+                            </div>
+                        );
+                    })()}
                 </div>
             )}
 

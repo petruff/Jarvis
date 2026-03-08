@@ -270,47 +270,45 @@ Task: Summarize this system status briefly and highly professionally, sounding e
         try {
             // Fast intent classifier to segregate true complex goals from casual conversation
             const intentCheckPrompt = `
-You are JARVIS.
+You are JARVIS. Your priority is to be a real-time conversational assistant, but you also have full autonomy to control the computer and browse the web.
 User Request: "${cmd}"
 Classify this request into one of two categories:
-1. "CONVERSATIONAL" - A simple question, personal greeting, check-in, or request for real-time data that you can answer directly.
-2. "GOAL" - A complex task requiring planning, research, coding, writing, or coordinating multiple agents over time.
+1. "CONVERSATIONAL" - The user is making a casual conversation, asking you to generate text, brainstorming ideas, saying hello, or asking general knowledge questions that you can answer from your own weights.
+2. "GOAL" - The user is asking you to PERFORM AN ACTION. This includes ANY request to: open the browser, search the web, look up latest news, check external facts, read files, write code, deploy a system, or interact with the OS.
+
+CRITICAL: If the user asks you to search for something on the internet, read the news, or open a website, you MUST choose "GOAL" so you can use your tools. Only choose "CONVERSATIONAL" if no external actions or web browsing are required.
 
 Return ONLY the single word "CONVERSATIONAL" or "GOAL". Nothing else.
 `;
             const classification = await queryLLM("Intent Classifier", intentCheckPrompt);
 
             if (classification.trim().includes('GOAL')) {
-                onResponse(`Iniciando orquestração autônoma Master para a diretriz. Desenhando plano de execução e recrutando agentes em background...`);
-                // Import lazy to avoid circular dependency issues at boot
-                const { agiOrchestrator } = require('./index');
+                onResponse(`Iniciando execução autônoma do Jarvis em background...`);
 
-                if (agiOrchestrator) {
-                    // Fire-and-forget orchestration
-                    agiOrchestrator.executeGoal(cmd, user)
-                        .then((result: any) => {
-                            let finalMsg = typeof result === 'string' ? result : JSON.stringify(result);
-                            if (finalMsg.length > 600) finalMsg = finalMsg.substring(0, 600) + '...';
+                // Fire-and-forget orchestration
+                runAgentLoop(cmd, 15, this.JARVIS_SYSTEM_PROMPT, this.io, 'jarvis', 'headless')
+                    .then((result: string) => {
+                        let finalMsg = result;
+                        if (finalMsg.length > 600) finalMsg = finalMsg.substring(0, 600) + '...';
 
-                            const summaryContext = `
-AGI Squad Orchestration has concluded.
+                        const summaryContext = `
+The Agent Execution has concluded.
 Goal: ${cmd}
 Result Raw: ${finalMsg}
 
-Summarize this result for the user gracefully in Brazilian Portuguese as JARVIS in 2 sentences. Present it as a final success report from the deployed squads.`;
+Summarize this result for the user gracefully in Brazilian Portuguese as JARVIS in 2 sentences. Present it as a final success report from the execution.`;
 
-                            queryLLM(this.JARVIS_SYSTEM_PROMPT, summaryContext).then(summary => {
-                                this.io.emit('jarvis/response', { text: summary });
-                                memory.add('assistant', `[AGI Orchestration Complete]: ${summary}`);
-                            });
-                        })
-                        .catch((err: any) => {
-                            this.io.emit('jarvis/response', { text: `Erro crítico reportado pela orquestração AGI: ${err.message}` });
+                        queryLLM(this.JARVIS_SYSTEM_PROMPT, summaryContext).then(summary => {
+                            this.io.emit('jarvis/response', { text: summary });
+                            onResponse(summary); // For WhatsApp/Telegram
+                            memory.add('assistant', `[Agent Execution Complete]: ${summary}`);
                         });
-                    return; // Yield early, letting the background process run without blocking
-                } else {
-                    console.warn('[CommandHandler] agiOrchestrator not found, falling back to conversational.');
-                }
+                    })
+                    .catch((err: any) => {
+                        this.io.emit('jarvis/response', { text: `Erro crítico reportado pela execução do Agente: ${err.message}` });
+                        onResponse(`Erro crítico reportado pela execução: ${err.message}`);
+                    });
+                return; // Yield early, letting the background process run without blocking
             }
         } catch (e) {
             console.error("AGI Orchestration classification failed", e);

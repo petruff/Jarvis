@@ -13,7 +13,7 @@ import { agentBus } from './agent-bus/redis-streams';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type NodeStatus = 'pending' | 'blocked' | 'in_progress' | 'done' | 'failed' | 'skipped';
+export type NodeStatus = 'pending' | 'blocked' | 'in_progress' | 'suspended' | 'done' | 'failed' | 'skipped';
 export type NodePriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 export interface DAGNode {
@@ -28,6 +28,9 @@ export interface DAGNode {
     startedAt?: string;
     completedAt?: string;
     retryCount?: number;
+    suspendReason?: string;
+    suspendUntil?: string; // ISO date string
+    subNodes?: DAGNode[];  // HTN: Hierarchical decomposition for complex tasks
 }
 
 export interface DAG {
@@ -209,6 +212,16 @@ Return ONLY valid JSON, no markdown:
         const MAX_ITERATIONS = dag.totalNodes * 3; // Safety: prevent infinite loops
 
         while (iteration++ < MAX_ITERATIONS) {
+            // Wake up suspended tasks if their wait time is over
+            const suspendedNodes = dag.nodes.filter(n => n.status === 'suspended');
+            for (const node of suspendedNodes) {
+                if (node.suspendUntil && new Date() > new Date(node.suspendUntil)) {
+                    node.status = 'pending';
+                    console.log(`[META-BRAIN] Node ${node.id} awakened from suspension.`);
+                    this.checkpoint(dag);
+                }
+            }
+
             // Find all nodes that are ready (pending + all dependencies done)
             const readyNodes = dag.nodes.filter(n =>
                 n.status === 'pending' &&
@@ -220,8 +233,21 @@ Return ONLY valid JSON, no markdown:
 
             if (readyNodes.length === 0) {
                 // Check if we're done or stuck
-                const pendingOrBlocked = dag.nodes.filter(n => n.status === 'pending' || n.status === 'blocked' || n.status === 'in_progress');
+                const pendingOrBlocked = dag.nodes.filter(n => n.status === 'pending' || n.status === 'blocked' || n.status === 'in_progress' || n.status === 'suspended');
                 if (pendingOrBlocked.length === 0) break; // All nodes terminal
+
+                // If there are suspended tasks, we must yield and not mark it as terminal
+                if (dag.nodes.some(n => n.status === 'suspended' || n.status === 'in_progress')) {
+                    // There is active or suspended work, just break the loop for now. It will resume later.
+                    return {
+                        dagId,
+                        success: true,
+                        completedNodes: dag.doneNodes,
+                        failedNodes: dag.failedNodes,
+                        summary: `DAG is paused. Waiting for tasks to complete or awaken from suspension.`,
+                    };
+                }
+
                 // Stuck: all remaining nodes have failed dependencies
                 const stuckNodes = dag.nodes.filter(n => n.status === 'pending');
                 for (const node of stuckNodes) {
@@ -251,14 +277,27 @@ Return ONLY valid JSON, no markdown:
                         .map(dep => `[${dep!.squad.toUpperCase()} OUTPUT — ${dep!.id}]\n${(dep!.result || '').slice(0, 800)}`)
                         .join('\n\n');
 
+                    // HTN Context Injection
+                    const originalTask = node.task;
                     const enrichedTask = depContext
-                        ? `${node.task}\n\n[CONTEXT FROM PREVIOUS STEPS]\n${depContext}`
-                        : node.task;
+                        ? `${originalTask}\n\n[CONTEXT FROM PREVIOUS STEPS]\n${depContext}\n\n[HTN CAPABILITY]: If this task requires waiting for an external event (e.g. Google indexing, manual user payment), output EXACTLY: <SUSPEND reason="Waiting for X" seconds="1000"> at the very end of your response.`
+                        : `${originalTask}\n\n[HTN CAPABILITY]: If this task requires waiting for an external event (e.g. Google indexing, user input), output EXACTLY: <SUSPEND reason="Waiting for X" seconds="1000"> at the very end of your response.`;
 
                     node.result = await orchestratorFn(enrichedTask, node.squad, `${dagId}/${node.id}`);
-                    node.status = 'done';
-                    node.completedAt = new Date().toISOString();
-                    dag.doneNodes++;
+
+                    // Parse suspension
+                    const suspendMatch = node.result.match(/<SUSPEND reason="([^"]+)" seconds="(\d+)">/i);
+                    if (suspendMatch) {
+                        node.status = 'suspended';
+                        node.suspendReason = suspendMatch[1];
+                        const waitSeconds = parseInt(suspendMatch[2], 10);
+                        node.suspendUntil = new Date(Date.now() + waitSeconds * 1000).toISOString();
+                        console.log(`[META-BRAIN] Node ${node.id} suspended for ${waitSeconds}s: ${node.suspendReason}`);
+                    } else {
+                        node.status = 'done';
+                        node.completedAt = new Date().toISOString();
+                        dag.doneNodes++;
+                    }
 
                     // Publish DAG node completion to bus
                     agentBus.publish({
@@ -270,7 +309,7 @@ Return ONLY valid JSON, no markdown:
                         mission: dagId,
                         priority: node.priority,
                         correlationId: dagId,
-                    }).catch(() => {});
+                    }).catch(() => { });
 
                 } catch (err: any) {
                     const retries = node.retryCount || 0;
@@ -294,7 +333,7 @@ Return ONLY valid JSON, no markdown:
                             mission: dagId,
                             priority: 'HIGH',
                             correlationId: dagId,
-                        }).catch(() => {});
+                        }).catch(() => { });
                     }
                 }
 

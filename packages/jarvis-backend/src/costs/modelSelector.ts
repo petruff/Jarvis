@@ -115,6 +115,20 @@ export class ModelSelector {
     if (model.includes('gpt-4') || model.includes('opus')) return 'premium'
     return 'standard'
   }
+
+  /**
+   * Get list of all supported models
+   */
+  getAllModels(): string[] {
+    return [
+      'deepseek-chat',
+      'gpt-3.5-turbo',
+      'gpt-4-turbo',
+      'opus',
+      'local-llama'
+    ]
+  }
 }
+
 
 export default ModelSelector

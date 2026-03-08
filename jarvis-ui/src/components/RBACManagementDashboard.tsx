@@ -17,10 +17,6 @@ interface Role {
   is_built_in: boolean;
 }
 
-interface UserRole {
-  user_id: string;
-  roles: Role[];
-}
 
 interface PermissionAuditLog {
   id: string;
@@ -57,7 +53,7 @@ export const RBACManagementDashboard: React.FC<RBACManagementDashboardProps> = (
 }) => {
   const [activeTab, setActiveTab] = useState<'roles' | 'users' | 'audit'>('roles');
   const [roles, setRoles] = useState<Role[]>([]);
-  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+  // const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [auditLog, setAuditLog] = useState<PermissionAuditLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,11 +167,10 @@ export const RBACManagementDashboard: React.FC<RBACManagementDashboardProps> = (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 font-semibold transition ${
-              activeTab === tab
-                ? 'border-b-2 border-blue-500 text-blue-400'
-                : 'text-slate-400 hover:text-slate-300'
-            }`}
+            className={`px-4 py-2 font-semibold transition ${activeTab === tab
+              ? 'border-b-2 border-blue-500 text-blue-400'
+              : 'text-slate-400 hover:text-slate-300'
+              }`}
           >
             {tab === 'roles' ? '👥 Roles' : tab === 'users' ? '👤 Users' : '📋 Audit Log'}
           </button>
@@ -286,11 +281,10 @@ export const RBACManagementDashboard: React.FC<RBACManagementDashboardProps> = (
                       </td>
                       <td className="py-2 px-3">
                         <span
-                          className={`text-xs font-semibold px-2 py-1 rounded ${
-                            entry.result === 'ALLOW'
-                              ? 'bg-green-900/30 text-green-300'
-                              : 'bg-red-900/30 text-red-300'
-                          }`}
+                          className={`text-xs font-semibold px-2 py-1 rounded ${entry.result === 'ALLOW'
+                            ? 'bg-green-900/30 text-green-300'
+                            : 'bg-red-900/30 text-red-300'
+                            }`}
                         >
                           {entry.result}
                         </span>

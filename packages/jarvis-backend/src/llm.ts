@@ -57,7 +57,8 @@ const PRICING = {
 const responseCache = new Map<string, { response: string; timestamp: number }>();
 const CACHE_TTL = 3_600_000;
 
-const cacheKey = (s: string) => Buffer.from(s).toString('base64').slice(0, 64);
+const crypto = require('crypto');
+const cacheKey = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 const fromCache = (k: string) => { const e = responseCache.get(k); return e && Date.now() - e.timestamp < CACHE_TTL ? e.response : null; };
 const toCache = (k: string, v: string) => responseCache.set(k, { response: v, timestamp: Date.now() });
 
@@ -146,8 +147,8 @@ const queryOllama = async (
         return text;
     } catch (err: any) {
         // Ollama not running is expected — silently fall through
-        if (err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED')) {
-            // Don't spam logs — Ollama simply not running
+        if (err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED') || err.message?.includes('404')) {
+            // Don't spam logs — Ollama simply not running or misconfigured
         } else {
             console.warn(`[LLM-OLLAMA] ${err.message}`);
         }
@@ -181,7 +182,7 @@ const queryOllamaStream = async (
         console.log(`[LLM-OLLAMA-STREAM] ✓ ${model} streamed ${full.length} chars (FREE)`);
         return full;
     } catch (err: any) {
-        if (!err.message?.includes('ECONNREFUSED')) console.warn(`[LLM-OLLAMA-STREAM] ${err.message}`);
+        if (!err.message?.includes('ECONNREFUSED') && !err.message?.includes('404')) console.warn(`[LLM-OLLAMA-STREAM] ${err.message}`);
         return null;
     }
 };
@@ -288,7 +289,7 @@ const queryClaude = async (
         console.log(`[LLM-CLAUDE] ✓ ${model} replied in ${Date.now() - t0}ms ($${cost.toFixed(5)})`);
         return text;
     } catch (err: any) {
-        console.warn(`[LLM-CLAUDE] ${err.message}`);
+        console.warn(`[LLM-CLAUDE] ${err.name}: ${err.message}`, err.stack);
         return null;
     }
 };
@@ -425,21 +426,17 @@ export const queryLLM = async (
         if (r) { toCache(ck, r); return r; }
     }
 
-    // T3 — Groq (free API)
-    const groqR = await queryGroq(systemPrompt, userPrompt, squadId);
-    if (groqR) { toCache(ck, groqR); return groqR; }
+    // T3 — Kimi (Moonshot - Primary as requested)
+    const kimiR = await queryKimi(systemPrompt, userPrompt);
+    if (kimiR) { toCache(ck, kimiR); return kimiR; }
 
     // T4 — Claude (paid — Haiku for simple, Sonnet for strategic)
     const claudeR = await queryClaude(systemPrompt, userPrompt, squadId);
     if (claudeR) { toCache(ck, claudeR); return claudeR; }
 
-    // T5 — DeepSeek
+    // T5 — Groq (free API)
     const dsR = await queryDeepSeek(systemPrompt, userPrompt, squadId);
     if (dsR) { toCache(ck, dsR); return dsR; }
-
-    // T6 — Kimi
-    const kimiR = await queryKimi(systemPrompt, userPrompt);
-    if (kimiR) { toCache(ck, kimiR); return kimiR; }
 
     return '⚠️ All LLM providers unavailable. Install Ollama (free) or set GROQ_API_KEY in .env';
 };
@@ -478,15 +475,27 @@ export const queryLLMStream = async (
         if (r) { toCache(ck, r); return r; }
     }
 
-    // T3 — Groq streaming
-    const groqR = await queryGroqStream(systemPrompt, userPrompt, onChunk, squadId);
-    if (groqR) { toCache(ck, groqR); return groqR; }
+    // T3 — Kimi (simulate stream for fast action logic)
+    const kimiR = await queryKimi(systemPrompt, userPrompt);
+    if (kimiR) {
+        const words = kimiR.split(' ');
+        for (let i = 0; i < words.length; i++) {
+            onChunk((i === 0 ? '' : ' ') + words[i]);
+            await new Promise(r => setTimeout(r, 20));
+        }
+        toCache(ck, kimiR);
+        return kimiR;
+    }
 
     // T4 — Claude streaming
     const claudeR = await queryClaudeStream(systemPrompt, userPrompt, onChunk, squadId);
     if (claudeR) { toCache(ck, claudeR); return claudeR; }
 
-    // T5 — DeepSeek streaming
+    // T5 — Groq streaming
+    const groqR = await queryGroqStream(systemPrompt, userPrompt, onChunk, squadId);
+    if (groqR) { toCache(ck, groqR); return groqR; }
+
+    // T6 — DeepSeek streaming
     if (deepseek && config.llm.deepseek_api_key) {
         const model = requiresDeepReasoning(squadId) ? 'deepseek-reasoner' : 'deepseek-chat';
         try {
@@ -506,18 +515,6 @@ export const queryLLMStream = async (
         } catch (err: any) {
             console.warn(`[LLM-DEEPSEEK-STREAM] ${err.message}`);
         }
-    }
-
-    // T6 — Kimi (simulate stream)
-    const kimiR = await queryKimi(systemPrompt, userPrompt);
-    if (kimiR) {
-        const words = kimiR.split(' ');
-        for (let i = 0; i < words.length; i++) {
-            onChunk((i === 0 ? '' : ' ') + words[i]);
-            await new Promise(r => setTimeout(r, 20));
-        }
-        toCache(ck, kimiR);
-        return kimiR;
     }
 
     const err = '⚠️ All LLM providers unavailable. Install Ollama (free) or set GROQ_API_KEY in .env';

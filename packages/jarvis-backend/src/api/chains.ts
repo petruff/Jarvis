@@ -19,9 +19,9 @@ export async function registerChainRoutes(fastify: FastifyInstance) {
       const tools: Tool[] = toolIds.map((id: string) => ({
         id,
         name: id,
-        inputs: [],
-        outputs: [id],
-        estimatedDuration: 100,
+        inputs: {},
+        outputs: { [id]: 'string' },
+        estimatedDurationMs: 100,
         parallelizable: true,
       }))
 
@@ -32,7 +32,6 @@ export async function registerChainRoutes(fastify: FastifyInstance) {
         data: {
           toolCount: graph.tools.size,
           dependencyCount: graph.dependencies.length,
-          depth: graph.depth,
           hasCircular: graph.circularDeps && graph.circularDeps.length > 0,
         },
       })
@@ -49,14 +48,14 @@ export async function registerChainRoutes(fastify: FastifyInstance) {
       const tools: Tool[] = body.tools || toolIds.map((id: string) => ({
         id,
         name: id,
-        inputs: [],
-        outputs: [id],
-        estimatedDuration: 100,
+        inputs: {},
+        outputs: { [id]: 'string' },
+        estimatedDurationMs: 100,
         parallelizable: true,
       }))
 
       const graph = dependencyAnalyzer.buildGraph(tools)
-      const result = chainOptimizer.optimizeChain(tools, toolIds, graph)
+      const result = chainOptimizer.optimizeChain(toolIds, graph)
 
       reply.send({
         status: 'success',

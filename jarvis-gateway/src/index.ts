@@ -16,16 +16,27 @@ async function validateEnvironment(): Promise<void> {
     }
 
     logger.info(`[Boot] Checking backend health at ${backendUrl}...`);
-    try {
-        const response = await fetch(`${backendUrl}/api/health`, { signal: AbortSignal.timeout(5000) });
-        if (!response.ok) throw new Error(`Backend returned status ${response.status}`);
-        const data = await response.json() as any;
-        if (data.status !== 'OK') throw new Error('Backend status is not OK');
-        logger.info('✅ Backend connection established');
-    } catch (err) {
-        logger.error(`❌ [GATEWAY] Backend unreachable at ${backendUrl}: ${(err as Error).message}. Halting.`);
-        process.exit(1);
+    let attempts = 0;
+    while (attempts < 10) {
+        try {
+            const response = await fetch(`${backendUrl}/api/health`, { signal: AbortSignal.timeout(5000) });
+            if (response.ok) {
+                const data = await response.json() as any;
+                if (data.status === 'OK') {
+                    logger.info('✅ Backend connection established');
+                    return;
+                }
+            }
+        } catch (err) {
+            // Ignore errors during retry phrase
+        }
+        attempts++;
+        logger.warn(`⚠️ [GATEWAY] Backend not ready, retrying in 2 seconds... (${attempts}/10)`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
+
+    logger.error(`❌ [GATEWAY] Backend unreachable at ${backendUrl} after 10 attempts. Halting.`);
+    process.exit(1);
 }
 
 async function main(): Promise<void> {
@@ -49,10 +60,10 @@ async function main(): Promise<void> {
     // Initialize channels
     const channels: string[] = [];
 
-    if (process.env.TELEGRAM_BOT_TOKEN) {
-        const tg = await initializeTelegram();
-        if (tg) channels.push('Telegram');
-    }
+    // if (process.env.TELEGRAM_BOT_TOKEN) {
+    //     const tg = await initializeTelegram();
+    //     if (tg) channels.push('Telegram');
+    // }
 
     if (process.env.WHATSAPP_ALLOWED_NUMBERS) {
         try {

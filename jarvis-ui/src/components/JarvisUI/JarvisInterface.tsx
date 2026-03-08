@@ -8,6 +8,7 @@ import { KnowledgeAutonomy } from './KnowledgeAutonomy'
 import { PerformanceMetrics } from './PerformanceMetrics'
 import { MemoryDisplay } from './MemoryDisplay'
 import { VoiceInterface } from './VoiceInterface'
+import { DnaVisualizer } from './DnaVisualizer'
 import './JarvisInterface.css'
 
 export const JarvisInterface: React.FC = () => {
@@ -49,6 +50,7 @@ export const JarvisInterface: React.FC = () => {
         {/* Left column */}
         <div className="column left">
           <SystemStatus status={systemData.status} />
+          <DnaVisualizer />
           <HolographicDisplay title="Circuit Breaker" icon="⚡">
             <CircuitBreaker
               calls={systemData.circuitBreaker.calls}
