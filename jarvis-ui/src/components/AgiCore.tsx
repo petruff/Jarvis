@@ -1,157 +1,165 @@
-import React, { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+// jarvis-ui/src/components/AgiCore.tsx
+import React, { useRef, useMemo, useEffect, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Sphere, MeshDistortMaterial, Stars, PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
+import { Socket } from 'socket.io-client';
 
 interface AgiCoreProps {
     socket?: Socket;
     active?: boolean;
 }
 
-const AgiCore: React.FC<AgiCoreProps> = ({ socket, active = true }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const pulseRef = useRef(0);
-    const neuralActivityRef = useRef(0.2);
+const NeuralOrb = ({ neuralActivity }: { neuralActivity: number }) => {
+    const meshRef = useRef<THREE.Mesh>(null!);
+    const glowRef = useRef<THREE.Mesh>(null!);
+
+    useFrame((state) => {
+        const time = state.clock.getElapsedTime();
+
+        // Pulse logic based on activity
+        const pulse = 1 + Math.sin(time * 2) * (0.05 + neuralActivity * 0.1);
+        meshRef.current.scale.set(pulse, pulse, pulse);
+
+        // Rotation
+        meshRef.current.rotation.x = time * 0.2;
+        meshRef.current.rotation.y = time * 0.3;
+
+        // Glow breathing
+        const glowScale = 1.2 + Math.sin(time * 3) * 0.1;
+        glowRef.current.scale.set(glowScale, glowScale, glowScale);
+    });
+
+    return (
+        <group>
+            {/* Inner Core */}
+            <Sphere ref={meshRef} args={[1.5, 64, 64]}>
+                <MeshDistortMaterial
+                    color="#FFB800"
+                    speed={2 + neuralActivity * 5}
+                    distort={0.4 + neuralActivity * 0.4}
+                    radius={1}
+                    emissive="#FF8A00"
+                    emissiveIntensity={2 + neuralActivity * 2}
+                    metalness={0.8}
+                    roughness={0.2}
+                />
+            </Sphere>
+
+            {/* Outer Glow Halo */}
+            <Sphere ref={glowRef} args={[1.6, 32, 32]}>
+                <meshBasicMaterial
+                    color="#FF8A00"
+                    transparent
+                    opacity={0.1 + neuralActivity * 0.2}
+                    side={THREE.BackSide}
+                />
+            </Sphere>
+
+            {/* Orbital Rings */}
+            <group rotation={[Math.PI / 4, 0, 0]}>
+                <mesh rotation={[Math.PI / 2, 0, 0]}>
+                    <torusGeometry args={[2.5, 0.01, 16, 100]} />
+                    <meshBasicMaterial color="#FFD600" transparent opacity={0.3} />
+                </mesh>
+            </group>
+        </group>
+    );
+};
+
+const DataParticles = ({ count = 100, activity = 0.2 }) => {
+    const points = useMemo(() => {
+        const p = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+            const r = 3 + Math.random() * 5;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * Math.PI;
+            p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+            p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            p[i * 3 + 2] = r * Math.cos(phi);
+        }
+        return p;
+    }, [count]);
+
+    const ref = useRef<THREE.Points>(null!);
+    useFrame(() => {
+        ref.current.rotation.y += 0.002 * (1 + activity * 5);
+        ref.current.rotation.z += 0.001;
+    });
+
+    return (
+        <points ref={ref}>
+            <bufferGeometry>
+                <bufferAttribute
+                    attach="attributes-position"
+                    args={[points, 3]}
+                />
+            </bufferGeometry>
+            <pointsMaterial size={0.05} color="#FFFFFF" transparent opacity={0.6} sizeAttenuation />
+        </points>
+    );
+};
+
+const AgiCore: React.FC<AgiCoreProps> = ({ socket }) => {
+    const [neuralActivity, setNeuralActivity] = useState(0.2);
+    const [webGlSupported, setWebGlSupported] = useState(true);
 
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        let animationFrameId: number;
-        const particles: Particle[] = [];
-        const particleCount = 120;
-
-        class Particle {
-            x: number = 0;
-            y: number = 0;
-            z: number = 0;
-            radius: number = 0;
-            color: string = '';
-            angle: number = 0;
-            speed: number = 0;
-            dist: number = 0;
-
-            constructor(canvasWidth: number, canvasHeight: number) {
-                this.reset(canvasWidth, canvasHeight);
-            }
-
-            reset(w: number, h: number) {
-                this.angle = Math.random() * Math.PI * 2;
-                this.speed = 0.005 + Math.random() * 0.01;
-                this.dist = 100 + Math.random() * 80;
-                this.radius = 0.5 + Math.random() * 2;
-                // Deep Amber / Neural Orange palette
-                const colors = ['#FFB800', '#FF8A00', '#FFD600', '#FFFFFF'];
-                this.color = colors[Math.floor(Math.random() * colors.length)];
-            }
-
-            update(w: number, h: number) {
-                this.angle += this.speed * (1 + neuralActivityRef.current * 2);
-                this.x = w / 2 + Math.cos(this.angle) * this.dist;
-                this.y = h / 2 + Math.sin(this.angle * 0.5) * (this.dist * 0.4);
-
-                // Add a vertical oscillation for 3D feel
-                this.y += Math.sin(pulseRef.current * 0.05 + this.angle) * 20;
-            }
-
-            draw(context: CanvasRenderingContext2D) {
-                context.beginPath();
-                context.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                context.fillStyle = this.color;
-                context.shadowBlur = 10;
-                context.shadowColor = this.color;
-                context.fill();
-                context.closePath();
-            }
+        // Quick WebGL support check
+        try {
+            const canvas = document.createElement('canvas');
+            const support = !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+            setWebGlSupported(support);
+        } catch (e) {
+            setWebGlSupported(false);
         }
-
-        const init = () => {
-            for (let i = 0; i < particleCount; i++) {
-                particles.push(new Particle(canvas.width, canvas.height));
-            }
-        };
-
-        const render = () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            pulseRef.current += 1;
-
-            // Draw central "Neural Sun"
-            const grad = ctx.createRadialGradient(
-                canvas.width / 2, canvas.height / 2, 0,
-                canvas.width / 2, canvas.height / 2, 80 + Math.sin(pulseRef.current * 0.1) * 5
-            );
-            grad.addColorStop(0, 'rgba(255, 184, 0, 0.8)');
-            grad.addColorStop(0.5, 'rgba(255, 138, 0, 0.3)');
-            grad.addColorStop(1, 'rgba(255, 138, 0, 0)');
-
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(canvas.width / 2, canvas.height / 2, 100, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Neural connection lines
-            ctx.strokeStyle = 'rgba(255, 184, 0, 0.1)';
-            ctx.lineWidth = 0.5;
-
-            particles.forEach((p, i) => {
-                p.update(canvas.width, canvas.height);
-                p.draw(ctx);
-
-                // Connect nearby particles
-                for (let j = i + 1; j < particles.length; j++) {
-                    const p2 = particles[j];
-                    const d = Math.sqrt((p.x - p2.x) ** 2 + (p.y - p2.y) ** 2);
-                    if (d < 40) {
-                        ctx.beginPath();
-                        ctx.moveTo(p.x, p.y);
-                        ctx.lineTo(p2.x, p2.y);
-                        ctx.stroke();
-                    }
-                }
-            });
-
-            animationFrameId = requestAnimationFrame(render);
-        };
-
-        const resize = () => {
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-        };
-
-        window.addEventListener('resize', resize);
-        resize();
-        init();
-        render();
-
-        return () => {
-            window.removeEventListener('resize', resize);
-            cancelAnimationFrame(animationFrameId);
-        };
     }, []);
 
     useEffect(() => {
         if (!socket) return;
-
-        socket.on('jarvis/pulse', (data) => {
-            neuralActivityRef.current = data.neuralLoad / 100;
-        });
-
-        return () => {
-            socket.off('jarvis/pulse');
-        }
+        const handler = (data: { neuralLoad: number }) => {
+            setNeuralActivity(data.neuralLoad / 100);
+        };
+        socket.on('jarvis/pulse', handler);
+        return () => { socket.off('jarvis/pulse', handler); };
     }, [socket]);
 
+    if (!webGlSupported) {
+        return (
+            <div className="flex flex-col items-center justify-center font-mono text-jarvis-primary/40 text-[10px]">
+                <div className="w-16 h-16 border border-jarvis-primary/20 rounded-full animate-pulse flex items-center justify-center">
+                    <div className="w-8 h-8 border border-jarvis-primary/40 rounded-full animate-ping" />
+                </div>
+                <span className="mt-4">3D CORE OFFLINE - WEBGL NOT SUPPORTED</span>
+            </div>
+        );
+    }
+
     return (
-        <div className="agi-core-container relative w-full h-full flex items-center justify-center overflow-hidden">
-            <canvas ref={canvasRef} className="w-full h-full absolute inset-0" />
-            <div className="absolute z-10 text-white font-bold opacity-20 pointer-events-none tracking-widest text-xs uppercase">
-                Neural Core Active
+        <div className="agi-core-container relative w-full h-[400px] flex items-center justify-center overflow-hidden cursor-pointer">
+            <Canvas dpr={[1, 2]} onError={() => setWebGlSupported(false)}>
+                <PerspectiveCamera makeDefault position={[0, 0, 10]} fov={45} />
+                <ambientLight intensity={0.5} />
+                <pointLight position={[10, 10, 10]} intensity={1.5} color="#FFB800" />
+                <pointLight position={[-10, -10, -10]} intensity={0.5} color="#FFD600" />
+
+                <NeuralOrb neuralActivity={neuralActivity} />
+                <DataParticles count={200} activity={neuralActivity} />
+                <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+
+                <fog attach="fog" args={['#070b14', 5, 20]} />
+            </Canvas>
+
+            <div className="absolute z-10 bottom-4 text-jarvis-primary font-mono opacity-40 pointer-events-none tracking-widest text-[10px] uppercase flex flex-col items-center">
+                <span className="animate-pulse">Neural Core V3.0 — Standard Dimension</span>
+                <div className="flex gap-4 mt-2">
+                    <span>SYNC: ONLINE</span>
+                    <span>LOAD: {(neuralActivity * 100).toFixed(1)}%</span>
+                </div>
             </div>
 
-            {/* Cinematic Overlays */}
-            <div className="absolute inset-0 bg-gradient-radial from-transparent to-black/40 pointer-events-none" />
-            <div className="absolute w-[120%] h-[120%] border border-amber-500/10 rounded-full animate-spin-slow pointer-events-none" />
+            {/* Radial Vignette Overlay */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(7,11,20,0.4)_70%,rgba(7,11,20,1)_100%)] pointer-events-none" />
         </div>
     );
 };

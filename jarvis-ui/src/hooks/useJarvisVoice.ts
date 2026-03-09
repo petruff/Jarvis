@@ -94,18 +94,23 @@ export const useJarvisVoice = (): UseJarvisVoiceReturn => {
         setVoiceState('SPEAKING');
 
         const base64Audio = audioQueueRef.current.shift()!;
-        console.log('[Audio] Processing queue, remaining:', audioQueueRef.current.length);
 
         try {
-            const audio = new Audio("data:audio/mpeg;base64," + base64Audio);
-            audio.onended = () => {
-                console.log('[Audio] Chunk ended');
+            const ctx = getAudioContext();
+            const binaryString = window.atob(base64Audio);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+
+            const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+
+            source.onended = () => {
                 isPlayingRef.current = false;
                 if (audioQueueRef.current.length === 0) {
                     if (isTalkMode) {
-                        console.log('[Audio] Talk Mode: Resuming listening...');
                         setVoiceState('LISTENING');
-                        addLog('SYSTEM', '🔄 Talk Mode: Auto-resumed listening');
                     } else {
                         setVoiceState('PASSIVE');
                     }
@@ -113,23 +118,14 @@ export const useJarvisVoice = (): UseJarvisVoiceReturn => {
                     processAudioQueue();
                 }
             };
-            audio.onerror = (e) => {
-                console.error('[Audio] Playback failed on element:', e);
-                isPlayingRef.current = false;
-                processAudioQueue();
-            };
-            audio.play().catch(err => {
-                console.error('[Audio] Playback promise failed:', err);
-                addLog('SYSTEM', '🔇 Audio Blocked by Browser. Please click inside the page to allow autoplay.');
-                isPlayingRef.current = false;
-                processAudioQueue();
-            });
+
+            source.start(0);
         } catch (err) {
-            console.error('[Audio] Execution failed:', err);
+            console.error('[Audio] WebAudio decode failed:', err);
             isPlayingRef.current = false;
             processAudioQueue();
         }
-    }, [addLog, isTalkMode]);
+    }, [isTalkMode]);
 
     const playAudio = useCallback((base64Audio: string) => {
         console.log('[Audio] Enqueueing audio chunk, length:', base64Audio.length);

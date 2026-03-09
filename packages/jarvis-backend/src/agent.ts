@@ -93,6 +93,42 @@ const INTERNAL_MEMORY_TOOLS = [
         }
     },
     {
+        name: 'deep_synthesis',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'QUIMERA ENGINE: Perform a deep synthesis of a topic using both Vector RAG and Knowledge Graph traversals. Use this for complex geopolitical, market, or technical analysis where standard search is not enough.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'The complex topic to analyze' }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'query_graph',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'KNOWLEDGE GRAPH: Retrieve the local neighborhood (connected entities/relations) of a specific entity in the knowledge graph.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                entityId: { type: 'string', description: 'The entity ID to search for (e.g. "btc", "oil", or a discovered alert ID)' }
+            },
+            required: ['entityId']
+        }
+    },
+    {
+        name: 'deep_web_search',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'SENTINEL RECON: Perform a reconnaissance mission on the Deep Web / TOR network. Use this to find information about leaks, anonymous security threats, or non-public market sentiment. REQUIRES TOR.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'The intel target to search for' }
+            },
+            required: ['query']
+        }
+    },
+    {
         name: 'execute_bash',
         _serverId: 'JARVIS_INTERNAL',
         description: 'Execute a terminal/bash command natively on the host machine strictly inside the project root workspace. Use this to run `npm install`, compile code (`npm run build`), or verify git status. DANGEROUS COMMANDS WILL BE BLOCKED.',
@@ -102,6 +138,43 @@ const INTERNAL_MEMORY_TOOLS = [
                 command: { type: 'string', description: 'The exact bash/cli command to run (e.g. "npm run build" or "dir")' }
             },
             required: ['command']
+        }
+    },
+    {
+        name: 'browser_navigate',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'GHOSTHAND: Navigate to a URL in the autonomous browser.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'The URL to visit' }
+            },
+            required: ['url']
+        }
+    },
+    {
+        name: 'browser_click',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'GHOSTHAND: Click an element in the autonomous browser using a CSS selector.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                selector: { type: 'string', description: 'The CSS selector to click' }
+            },
+            required: ['selector']
+        }
+    },
+    {
+        name: 'browser_type',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'GHOSTHAND: Type text into an input field in the autonomous browser.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                selector: { type: 'string', description: 'The CSS selector of the input field' },
+                text: { type: 'string', description: 'The text to type' }
+            },
+            required: ['selector', 'text']
         }
     },
     {
@@ -372,6 +445,39 @@ async function handleInternalTool(toolName: string, args: Record<string, any>, a
             if (!chunks.length) return "No matches found in ChromaDB.";
             const results = chunks.map((c: any) => `[ID: ${c.metadata.docId}]\n...\n${c.text}\n...\n`).join('\n--------\n');
             return `ChromaDB Search Results:\n${results}`;
+        }
+
+        if (toolName === 'deep_synthesis') {
+            const { quimera } = require('./intelligence/quimera');
+            const result = await quimera.analyze(args.query);
+            return `[QUIMERA RESULT (Confidence: ${result.confidence})]\n\nRational Core: ${result.rational_core}\n\nConnections Found:\n${result.connections.map((c: string) => `- ${c}`).join('\n')}`;
+        }
+
+        if (toolName === 'query_graph') {
+            const { knowledgeGraph } = require('./memory/graph');
+            const neighbors = await knowledgeGraph.getNeighborhood(args.entityId);
+            return `Knowledge Graph Neighborhood for "${args.entityId}":\n\nNODES:\n${neighbors.nodes.map((n: any) => `- [${n.id}] ${n.label} (${n.type})`).join('\n')}\n\nEDGES:\n${neighbors.edges.map((e: any) => `- ${e.from} --(${e.relation})--> ${e.to}`).join('\n')}`;
+        }
+
+        if (toolName === 'deep_web_search') {
+            const { torSentinel } = require('./recon/torClient');
+            const results = await torSentinel.searchIntel(args.query);
+            return `--- TOR SENTINEL RECON RESULTS ---\n\n${results.map((r: any) => `[TITLE]: ${r.title}\n[SOURCE]: ${r.source}\n[INTEL]: ${r.snippet}`).join('\n---\n')}\n\n--- RECON COMPLETE ---`;
+        }
+
+        if (toolName === 'browser_navigate') {
+            const { domCortex } = require('./autonomy/domCortex');
+            return await domCortex.navigate(args.url);
+        }
+
+        if (toolName === 'browser_click') {
+            const { domCortex } = require('./autonomy/domCortex');
+            return await domCortex.click(args.selector);
+        }
+
+        if (toolName === 'browser_type') {
+            const { domCortex } = require('./autonomy/domCortex');
+            return await domCortex.type(args.selector, args.text);
         }
 
         if (toolName === 'desktop_screenshot') {

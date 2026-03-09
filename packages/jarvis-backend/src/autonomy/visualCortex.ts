@@ -1,5 +1,8 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
+const screenshot = require('screenshot-desktop');
+import { yoloBridge } from './yoloBridge';
+import logger from '../logger';
 
 export interface VisualTrigger {
     id: string;
@@ -7,6 +10,14 @@ export interface VisualTrigger {
     description: string;
     confidence: number;
     timestamp: number;
+}
+
+export interface AirSegmentation {
+    objects: string[];
+    altitude: number;
+    latitude: number;
+    longitude: number;
+    detected_threats: string[];
 }
 
 /**
@@ -31,15 +42,32 @@ export class VisualCortex {
     async start(io?: any) {
         this.io = io;
         this.isActive = true;
-        console.log('[VisualCortex] Starting real-time vision analysis (1 FPS mode)...');
 
-        // In real AGI, this would be a loop watching for new files in streamDir
-        // or consuming a WebSocket/WebRTC stream of JPEG/PNG chunks.
+        // Start the YOLO Python Kernel
+        await yoloBridge.start();
+
+        logger.info('[VisualCortex] Starting real-time vision analysis (1 FPS mode)...');
+
+        // Start capture loop
+        this.captureLoop();
+
+        // Start analysis loop
         this.analysisLoop();
     }
 
+    private async captureLoop() {
+        while (this.isActive) {
+            try {
+                const filename = path.join(this.streamDir, `frame_${Date.now()}.jpg`);
+                await screenshot({ filename });
+            } catch (e: any) {
+                logger.warn(`[VisualCortex] Capture failed: ${e.message}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 FPS
+        }
+    }
+
     private async analysisLoop() {
-        console.log(`[VisualCortex] Monitoring stream directory: ${this.streamDir}`);
         while (this.isActive) {
             try {
                 const files = await fs.readdir(this.streamDir);
@@ -59,7 +87,7 @@ export class VisualCortex {
                     }
                 }
             } catch (error: any) {
-                console.error(`[VisualCortex] Analysis cycle error: ${error.message}`);
+                logger.error(`[VisualCortex] Analysis cycle error: ${error.message}`);
             }
 
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -69,26 +97,49 @@ export class VisualCortex {
     private async processFrame(filePath: string) {
         // Simulation of Vision trigger detection 
         const triggers = this.detectTriggers();
-        if (triggers.length > 0) {
-            console.log(`[VisualCortex] ${triggers.length} vision triggers detected in ${path.basename(filePath)}`);
 
-            if (this.io) {
-                this.io.emit('jarvis/visual_trigger', {
-                    triggers,
-                    frame: path.basename(filePath),
-                    timestamp: Date.now()
-                });
-            }
+        if (this.io) {
+            const liveResult = await yoloBridge.getLatestResult();
+
+            this.io.emit('jarvis/visual_trigger', {
+                triggers,
+                air_segmentation: this.processLiveVision(liveResult),
+                frame: path.basename(filePath),
+                timestamp: Date.now()
+            });
         }
     }
 
+    private processLiveVision(result: any): AirSegmentation {
+        if (!result || !result.detections) {
+            return {
+                objects: [],
+                altitude: 35000,
+                latitude: -23.5505,
+                longitude: -46.6333,
+                detected_threats: []
+            };
+        }
+
+        const objects = result.detections.map((d: any) => `${d.class} (${Math.round(d.confidence * 100)}%)`);
+        const threats = result.detections
+            .filter((d: any) => ['person', 'weapon', 'danger'].includes(d.class))
+            .map((d: any) => d.class);
+
+        return {
+            objects,
+            altitude: 35000,
+            latitude: -23.5505,
+            longitude: -46.6333,
+            detected_threats: threats
+        };
+    }
 
     /**
      * Detect patterns in the visual field
      */
     private detectTriggers(): VisualTrigger[] {
-        // Mock trigger detection
-        // e.g. If user stays on a compilation error page for > 30s
+        // Placeholder for advanced pattern matching
         return [];
     }
 
@@ -97,8 +148,8 @@ export class VisualCortex {
      */
     stop() {
         this.isActive = false;
+        yoloBridge.stop();
     }
 }
 
 export const visualCortex = new VisualCortex(process.cwd());
-

@@ -26,13 +26,15 @@ module.exports = {
         {
             name: 'jarvis-ui',
             script: './node_modules/vite/bin/vite.js',
-            args: 'dev -- --port 8080',
+            args: '--port 8080 --host',
             cwd: './jarvis-ui',
             watch: false,
             max_memory_restart: '512M',
             restart_delay: 5000,
             env: {
                 NODE_ENV: 'development',
+                VITE_API_URL: 'http://localhost:3000',
+                VITE_WS_URL: 'ws://localhost:3000',
             }
         }
     ]

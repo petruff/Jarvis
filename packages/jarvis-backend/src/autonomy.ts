@@ -28,7 +28,9 @@ type SignalType =
     | 'market_opportunity'  // Business-hours trigger for market intelligence
     | 'daily_briefing'      // 8 AM morning briefing
     | 'competitor_shift'    // Weekly competitor monitoring
-    | 'system_health';      // End-of-day operational review
+    | 'system_health'      // End-of-day operational review
+    | 'world_anomaly'      // Critical global events (detected by Monitor)
+    | 'predictive_growth'; // High-confidence strategic predictions
 
 interface Signal {
     type: SignalType;
@@ -90,6 +92,20 @@ const MISSION_BANK: MissionTemplate[] = [
         preferredSquad: 'atlas',
         minIntervalHours: 8,
     },
+    {
+        signal: 'world_anomaly',
+        name: 'Global Crisis Response',
+        prompt: 'A critical event has been detected by the World Monitor. Analyze the geopolitical alerts and aviation/maritime disruptions from the last hour. Propose a mitigation strategy or an executive summary of risks to JARVIS operations.',
+        preferredSquad: 'sentinel',
+        minIntervalHours: 4,
+    },
+    {
+        signal: 'predictive_growth',
+        name: 'Anticipatory Strategic Move',
+        prompt: 'Based on the current trajectory of user behavior and market trends, I have identified a non-obvious opportunity for growth. Detail the prediction and design a proactive mission to capitalize on it.',
+        preferredSquad: 'nexus',
+        minIntervalHours: 48,
+    },
 ];
 
 // ─── Engine State ─────────────────────────────────────────────────────────────
@@ -131,6 +147,7 @@ export class AutonomyEngine {
         private episodicMemory: EpisodicMemory | null,
         private goalManager: GoalManager | null,
         private orchestrator: MissionOrchestrator | null,
+        private worldMonitor: any | null = null,
         logFn?: (...args: any[]) => void,
     ) {
         this.log = logFn ?? console.log;
@@ -204,9 +221,11 @@ export class AutonomyEngine {
                 ? await this.episodicMemory.getRecentHistory(10).catch(() => [])
                 : [];
 
+            const worldState = this.worldMonitor ? this.worldMonitor.getState() : null;
+
             // ── 2. ASSESS ───────────────────────────────────────────────────
             this.log('[Autonomy] [ASSESS] Scoring signals...');
-            const signals = this.scoreSignals(goals, recentEpisodes);
+            const signals = this.scoreSignals(goals, recentEpisodes, worldState);
 
             const signalSummary = signals.length > 0
                 ? signals.map(s => `${s.type}(${s.severity})`).join(', ')
@@ -236,11 +255,21 @@ export class AutonomyEngine {
 
     // ── Signal Detection ───────────────────────────────────────────────────
 
-    private scoreSignals(goals: any[], episodes: any[]): Signal[] {
+    private scoreSignals(goals: any[], episodes: any[], worldState: any | null): Signal[] {
         const signals: Signal[] = [];
         const now = new Date();
         const hour = now.getHours();
-        const day = now.getDay(); // 0=Sun, 6=Sat
+        const day = now.getDay();
+
+        // WORLD ANOMALIES (Monitor-driven)
+        if (worldState) {
+            const hasCriticalAlerts = worldState.geopolitics.critical_alerts.length > 0;
+            const flightSurge = worldState.aviation.total_active_flights > 15000; // Example threshold
+
+            if (hasCriticalAlerts || flightSurge) {
+                signals.push({ type: 'world_anomaly', severity: hasCriticalAlerts ? 5 : 2 });
+            }
+        }
 
         // Goal drift: RED/AMBER goals indicate strategic risk
         const atRisk = goals.filter(g => g.status === 'RED' || g.status === 'AMBER');
@@ -424,18 +453,19 @@ export function startAutonomyEngine(
     episodicMemory?: EpisodicMemory,
     goalManager?: GoalManager,
     orchestrator?: MissionOrchestrator,
+    worldMonitor?: any
 ): AutonomyEngine {
     const logFn = (...args: any[]) => fastify.log.info(args.join(' '));
 
     if (!episodicMemory || !goalManager || !orchestrator) {
-        fastify.log.warn('[Autonomy] Started in limited mode — OODA disabled (missing EpisodicMemory/GoalManager/Orchestrator)');
-        _engine = new AutonomyEngine(io, null, null, null, logFn);
+        fastify.log.warn('[Autonomy] Started in limited mode — OODA disabled (missing dependencies)');
+        _engine = new AutonomyEngine(io, null, null, null, null, logFn);
         return _engine;
     }
 
-    _engine = new AutonomyEngine(io, episodicMemory, goalManager, orchestrator, logFn);
+    _engine = new AutonomyEngine(io, episodicMemory, goalManager, orchestrator, worldMonitor || null, logFn);
     _engine.start();
-    fastify.log.info('[Autonomy] OODA Engine initialized and running (full mode).');
+    fastify.log.info('[Autonomy] OODA Engine initialized with World Intelligence.');
     return _engine;
 }
 

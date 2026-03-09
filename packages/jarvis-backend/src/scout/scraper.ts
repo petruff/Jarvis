@@ -67,7 +67,7 @@ export class ScoutScraper {
 
                     // Directly inject to Jarvis's Subconscious
                     const documentId = `scout_intel_${domain.name.replace(/\s+/g, '_')}_${Date.now()}`;
-                    await hybridMemory.encodeDocument(documentId, intelReport, { source: 'scout_background_job', domain: domain.name });
+                    await hybridMemory.encodeDocument(documentId, intelReport, 'WORKSPACE', { source: 'scout_background_job', domain: domain.name });
                     console.log(`[Scout] Memory encoded successfully for ${domain.name}`);
 
                 } catch (feedErr: any) {

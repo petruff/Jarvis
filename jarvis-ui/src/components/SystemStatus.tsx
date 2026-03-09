@@ -139,6 +139,15 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ isConnected = false, voiceS
                     )}
                 </div>
             </div>
+
+            {/* GhostHand Status (Real-time Browser) */}
+            <div className="flex items-center gap-3">
+                <span className="text-jarvis-primary/50 tracking-widest text-[9px]">GHOSTHAND</span>
+                <div className={`w-2 h-2 rounded-full font-bold text-[10px] ${voiceState === 'PROCESSING' ? 'bg-orange-500 shadow-[0_0_10px_rgba(255,165,0,0.8)] animate-pulse' : 'bg-jarvis-primary/20'}`}></div>
+                <span className={`text-[10px] font-bold ${voiceState === 'PROCESSING' ? 'text-orange-400' : 'text-jarvis-primary/40'}`}>
+                    {voiceState === 'PROCESSING' ? 'ACTIVE' : 'IDLE'}
+                </span>
+            </div>
         </div>
     );
 };

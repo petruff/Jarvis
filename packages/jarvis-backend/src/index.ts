@@ -39,6 +39,8 @@ import { missionControl } from './missionControl';
 import { config } from './config/loader';
 import { ScoutScraper } from './scout/scraper';
 import { visualCortex } from './autonomy/visualCortex';
+import { worldMonitor } from './intelligence/worldMonitor';
+import { knowledgeGraph } from './memory/graph';
 import OpenAI from 'openai';
 import { registerCostRoutes } from './api/costs';
 import { registerSkillRoutes } from './api/skills';
@@ -638,6 +640,58 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         console.error('[ROUTE-REG] ERROR during cost route registration:', error.message || error);
     }
 
+    // ── Register ALL Phase 7 API Routes ───────────────────────────────────────────────────
+    console.log('[ROUTE-REG] Registering remaining Phase 7 API routes...');
+    try {
+        await registerSkillRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Skills routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering skills:', err.message);
+    }
+
+    try {
+        await registerContextRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Context routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering context:', err.message);
+    }
+
+    try {
+        await registerChainRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Chain routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering chains:', err.message);
+    }
+
+    try {
+        await registerVoiceRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Voice routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering voice:', err.message);
+    }
+
+    try {
+        await registerMindCloneRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Mind clone routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering mind clones:', err.message);
+    }
+
+    try {
+        await registerEnterpriseRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Enterprise routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering enterprise:', err.message);
+    }
+
+    try {
+        await registerTestRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Test routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering test routes:', err.message);
+    }
+
+    console.log('[ROUTE-REG] ✅ ALL PHASE 7 ROUTES REGISTERED SUCCESSFULLY');
 
 }, { skipEncapsulation: true, prefix: '' }); // END registerApplicationRoutes plugin - SKIP ENCAPSULATION + NO PREFIX
 
@@ -1021,10 +1075,14 @@ const start = async () => {
         console.log('   PHASE 7 INITIALIZATION COMPLETE      ');
         console.log('-----------------------------------------\n');
 
+        // Initialize Graph & Monitor
+        await knowledgeGraph.initialize();
+
         // Socket.IO connection handler
         io.on('connection', (socket) => {
-            // Start the Visual Cortex when the desktop client connects
+            // Start the Visual Cortex & World Monitor
             visualCortex.start(io);
+            worldMonitor.start(600000); // 10 min cycles
 
             fastify.log.info(`Client connected: ${socket.id}`);
 
@@ -1062,12 +1120,29 @@ const start = async () => {
                 } catch (e) { }
             }, 2000);
 
+            // World Monitor Pulse (emitted every 10s)
+            const worldInterval = setInterval(() => {
+                try {
+                    const worldData = worldMonitor.getState();
+                    socket.emit('jarvis/world_monitor', worldData);
+
+                    // Also emit Graph Pulse
+                    const db = (knowledgeGraph as any).db;
+                    if (db) {
+                        const nodeCount = db.prepare('SELECT count(*) as count FROM nodes').get().count;
+                        const edgeCount = db.prepare('SELECT count(*) as count FROM edges').get().count;
+                        socket.emit('jarvis/graph_pulse', { nodeCount, edgeCount });
+                    }
+                } catch (e) { }
+            }, 10000);
+
             // Send initial Squad Roster
             const allAgents = agentRegistry.getAllAgents();
             socket.emit('squad/init', allAgents);
 
             socket.on('disconnect', () => {
                 clearInterval(metricsInterval);
+                clearInterval(worldInterval);
                 fastify.log.info(`Client disconnected: ${socket.id}`);
             });
 
@@ -1374,7 +1449,7 @@ Summarize this result for the user gracefully in ${lang === 'pt' ? 'Brazilian Po
         // ──────────────────────────────────────────────
         // Start Autonomy Engine (Cron Scheduler)
         // ──────────────────────────────────────────────
-        const autonomyEngine = startAutonomyEngine(fastify, io, episodicMemory, goalManager, missionOrchestrator);
+        const autonomyEngine = startAutonomyEngine(fastify, io, episodicMemory, goalManager, missionOrchestrator, worldMonitor);
         missionControl.registerJob({ stop: () => autonomyEngine.stop(), id: 'AutonomyEngine' });
 
         // ──────────────────────────────────────────────

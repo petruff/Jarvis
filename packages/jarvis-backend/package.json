@@ -61,6 +61,7 @@
         "rss-parser": "^3.13.0",
         "screenshot-desktop": "^1.15.3",
         "socket.io": "^4.7.2",
+        "socks-proxy-agent": "^8.0.5",
         "telegraf": "^4.16.3",
         "vectordb": "^0.21.2",
         "vm2": "^3.10.5",
