@@ -20,6 +20,7 @@ import { GoalManager } from './goals/goalManager';
 import { MissionOrchestrator } from './orchestrator';
 import { ConfidenceEngine } from './autonomy/confidenceEngine';
 import { metricsCollector } from './instrumentation/metricsCollector';
+import { oodaTimingValidator } from './autonomy/ooda-timing-validator';
 
 // ─── Signal Types ─────────────────────────────────────────────────────────────
 
@@ -187,6 +188,9 @@ export class AutonomyEngine {
         this.state.cycleCount++;
         this.state.lastTick = new Date();
         const cycleStartTime = Date.now();
+        const cycleId = `cycle-${this.state.cycleCount}-${cycleStartTime}`;
+
+        oodaTimingValidator.startCycle(cycleId);
 
         try {
             // ── HTN LONG-HORIZON WAKE UP ────────────────────────────────────
@@ -225,6 +229,9 @@ export class AutonomyEngine {
 
             const worldState = this.worldMonitor ? this.worldMonitor.getState() : null;
 
+            const orientPhase = oodaTimingValidator.completePhase('ORIENT');
+            this.log(`[Autonomy] [ORIENT] Complete (${orientPhase.duration}ms)`);
+
             // ── 2. ASSESS ───────────────────────────────────────────────────
             this.log('[Autonomy] [ASSESS] Scoring signals...');
             const signals = this.scoreSignals(goals, recentEpisodes, worldState);
@@ -233,6 +240,9 @@ export class AutonomyEngine {
                 ? signals.map(s => `${s.type}(${s.severity})`).join(', ')
                 : 'none';
             this.log(`[Autonomy] [ASSESS] Signals: ${signalSummary}`);
+
+            const assessPhase = oodaTimingValidator.completePhase('ASSESS');
+            this.log(`[Autonomy] [ASSESS] Complete (${assessPhase.duration}ms)`);
 
             if (signals.length === 0) {
                 this.state.idleCycles++;
@@ -248,12 +258,32 @@ export class AutonomyEngine {
                 await this.decideAndAct(candidate);
             }
 
+            const decidePhase = oodaTimingValidator.completePhase('DECIDE');
+            const actPhase = oodaTimingValidator.completePhase('ACT');
+            this.log(`[Autonomy] [DECIDE] Complete (${decidePhase.duration}ms), [ACT] Complete (${actPhase.duration}ms)`);
+
         } catch (err: any) {
             this.log(`[Autonomy] OODA cycle error: ${err.message}`);
         } finally {
             const cycleDurationMs = Date.now() - cycleStartTime;
+            const timingReport = oodaTimingValidator.completeCycle(cycleId);
+            const timingStats = oodaTimingValidator.getTimingStatistics();
+
             metricsCollector.recordOodaCycleDuration(cycleDurationMs);
+
+            // Log timing report
+            this.log(`[Autonomy] OODA Timing Report:`);
+            this.log(`  Duration: ${(cycleDurationMs / 1000 / 60).toFixed(2)} min (target: 30±2 min)`);
+            this.log(`  Within tolerance: ${timingReport.withinTolerance}`);
+            this.log(`  Drift: ${(timingReport.driftFromTarget / 1000 / 60).toFixed(2)} min`);
+            this.log(`  Trend: ${timingStats.driftTrend}`);
+
+            if (timingReport.correctionApplied) {
+                this.log(`  Correction: ${timingReport.correctionApplied}`);
+            }
+
             this.isRunning = false;
+            oodaTimingValidator.reset();
         }
     }
 
