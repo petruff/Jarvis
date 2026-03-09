@@ -36,6 +36,7 @@ import { metaBrain } from './metaBrain';
 import { mutationStore } from './agents/mutationStore';
 import { dnaTracker } from './agents/dna-tracker';
 import { costTracker } from './cost/tracker';
+import { sandboxValidator } from './security/sandbox-validator';
 import { genesisEngine } from './agents/genesis';
 import { missionControl } from './missionControl';
 import { config } from './config/loader';
@@ -52,6 +53,7 @@ import { registerVoiceRoutes } from './api/voice';
 import { registerDNAMutationRoutes } from './api/dna-mutations';
 import { registerBriefingRoutes } from './api/briefings';
 import { registerCostTrackingRoutes } from './api/cost-tracking';
+import { registerSecurityValidationRoutes } from './api/security-validation';
 // import { registerKnowledgeRoutes } from './api/knowledge'; // COMMENTED OUT: missing pdf-parse dependency
 import { registerMindCloneRoutes } from './api/mindclones';
 import { initRealtime } from './api/realtime';
@@ -741,6 +743,13 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         console.log('[ROUTE-REG] ✓ Cost tracking routes registered');
     } catch (err: any) {
         console.error('[ROUTE-REG] ERROR registering cost tracking:', err.message);
+    }
+
+    try {
+        await registerSecurityValidationRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Security validation routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering security validation:', err.message);
     }
 
     console.log('[ROUTE-REG] ✅ ALL PHASE 7 ROUTES REGISTERED SUCCESSFULLY');
