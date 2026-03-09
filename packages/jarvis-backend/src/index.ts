@@ -59,6 +59,12 @@ import { registerOperationalityRoutes } from './api/operationality';
 import { registerMindCloneRoutes } from './api/mindclones';
 import { initRealtime } from './api/realtime';
 
+// ── Phase 4: Advanced AGI Capabilities ──────────────────────────────────────
+import { registerQuimeraRoutes } from './api/quimera';
+import { registerDomCortexRoutes } from './api/dom-cortex';
+import { registerWorldMonitorRoutes } from './api/world-monitor';
+import { registerYoloRoutes } from './api/yolo';
+
 // ── Phase 7: Enterprise Features ──────────────────────────────────────────────
 import { registerEnterpriseRoutes } from './api/mindclones-enterprise';
 import { registerTestRoutes } from './api/test-plugin';
@@ -760,7 +766,36 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         console.error('[ROUTE-REG] ERROR registering operationality:', err.message);
     }
 
-    console.log('[ROUTE-REG] ✅ ALL PHASE 7 ROUTES REGISTERED SUCCESSFULLY');
+    // ── Phase 4: Advanced AGI Capabilities ──────────────────────────────────────
+    try {
+        await registerQuimeraRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Quimera deep synthesis routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering quimera:', err.message);
+    }
+
+    try {
+        await registerDomCortexRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ DomCortex browser automation routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering dom-cortex:', err.message);
+    }
+
+    try {
+        await registerWorldMonitorRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ WorldMonitor global surveillance routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering world-monitor:', err.message);
+    }
+
+    try {
+        await registerYoloRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ YOLO vision system routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering yolo:', err.message);
+    }
+
+    console.log('[ROUTE-REG] ✅ ALL ROUTES (PHASES 1-4) REGISTERED SUCCESSFULLY');
 
 }, { skipEncapsulation: true, prefix: '' }); // END registerApplicationRoutes plugin - SKIP ENCAPSULATION + NO PREFIX
 
@@ -847,6 +882,25 @@ const start = async () => {
 
         // Initialize Quality Gate
         qualityGate = new QualityGate(missionOrchestrator);
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Phase 4: Initialize Advanced AGI Capabilities
+        // ─────────────────────────────────────────────────────────────────────────
+        console.log('\n🚀 [PHASE 4] Initializing Advanced AGI Capabilities...');
+
+        try {
+            await knowledgeGraph.initialize();
+            console.log('✓ Knowledge Graph initialized (local GraphRAG)');
+        } catch (err: any) {
+            console.warn('[Phase 4] Knowledge Graph init warning:', err.message);
+        }
+
+        try {
+            worldMonitor.start(600000); // 10-minute polling interval
+            console.log('✓ WorldMonitor initialized (global surveillance enabled)');
+        } catch (err: any) {
+            console.warn('[Phase 4] WorldMonitor init warning:', err.message);
+        }
 
         // ─────────────────────────────────────────────────────────────────────────
         // Initialize AGI Orchestrator System (JARVIS AGI - Autonomous Goal Execution)

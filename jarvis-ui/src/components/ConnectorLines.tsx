@@ -22,9 +22,9 @@ const ConnectorLines: React.FC = () => {
                 <line x1="30%" y1="55%" x2="30%" y2="60%" stroke="#00f3ff" strokeWidth="1" strokeOpacity="0.3" />
                 <line x1="70%" y1="55%" x2="70%" y2="60%" stroke="#00f3ff" strokeWidth="1" strokeOpacity="0.3" />
 
-                {/* Angled Lines decoration */}
-                <path d="M 50% 35% L 45% 40%" stroke="#00f3ff" strokeWidth="1" strokeOpacity="0.2" fill="none" />
-                <path d="M 50% 35% L 55% 40%" stroke="#00f3ff" strokeWidth="1" strokeOpacity="0.2" fill="none" />
+                {/* Angled Lines decoration — fixing invalid percent in path D attribute */}
+                <line x1="50%" y1="35%" x2="45%" y2="40%" stroke="#00f3ff" strokeWidth="1" strokeOpacity="0.2" />
+                <line x1="50%" y1="35%" x2="55%" y2="40%" stroke="#00f3ff" strokeWidth="1" strokeOpacity="0.2" />
             </svg>
         </div>
     );

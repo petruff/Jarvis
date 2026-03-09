@@ -1,5 +1,5 @@
-﻿import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-const AgiCoreLazy = lazy(() => import('./components/AgiCore'));
+﻿import { useState, useEffect, useRef } from 'react';
+import AgiCore from './components/AgiCore';
 import SystemTelemetry from './components/SystemTelemetry';
 import CommandInput from './components/CommandInput';
 import AgentSelector from './components/AgentSelector';
@@ -160,9 +160,7 @@ function App() {
                     {/* Central Visualizer - Scalable */}
                     <div className={`transition-transform duration-500 z-0 opacity-90 w-full h-full max-h-[350px] flex items-center justify-center ${voiceState === 'LISTENING' ? 'scale-110' : 'scale-100'}`}>
                         {socket ? (
-                            <Suspense fallback={<div className="text-jarvis-primary/20 font-mono text-[8px] animate-pulse">LOADING NEURAL CORE...</div>}>
-                                <AgiCoreLazy socket={socket as any} active={true} />
-                            </Suspense>
+                            <AgiCore socket={socket as any} active={true} />
                         ) : (
                             <div className="text-jarvis-primary/20 font-mono text-[8px] animate-pulse">ESTABLISHING NEURAL LINK...</div>
                         )}
@@ -175,21 +173,21 @@ function App() {
                     {/* Info Bar / Stats */}
                     <div className="w-full flex items-center justify-center gap-4 text-[10px] font-mono text-jarvis-primary/60 uppercase tracking-wider">
                         <div className="w-2 h-2 rounded-full bg-jarvis-primary shadow-glow animate-pulse"></div>
-                        <span className="hidden sm:inline">SYSTEM NOMINAL â€” NEURAL CLUSTER ONLINE</span>
-                        <span className="sm:hidden">SYSTEM ONLINE</span>
+                        <span className="hidden sm:inline">SYSTEM NOMINAL — NEURAL CLUSTER ONLINE</span>
+                        <span className="sm:inline">SYSTEM ONLINE</span>
                         <div className="flex-1 h-px bg-jarvis-primary/20"></div>
 
                         <button
                             onClick={() => setShowDashboard(!showDashboard)}
                             className="hover:text-cyan-400 hover:shadow-[0_0_15px_rgba(0,243,255,0.8)] transition-all duration-300 cursor-pointer mr-2 border border-jarvis-primary/30 px-3 py-1 bg-jarvis-primary/10 rounded backdrop-blur-sm animate-pulse"
                         >
-                            [{showDashboard ? 'CLOSE SQUAD' : 'âš¡ SQUAD'}]
+                            [{showDashboard ? 'CLOSE SQUAD' : '⚡ SQUAD'}]
                         </button>
                         <button
                             onClick={() => setShowStrategy(!showStrategy)}
                             className="hover:text-gold-400 hover:shadow-[0_0_15px_rgba(255,215,0,0.8)] text-yellow-500 transition-all duration-300 cursor-pointer border border-yellow-500/30 px-3 py-1 bg-yellow-500/10 rounded backdrop-blur-sm animate-pulse"
                         >
-                            [{showStrategy ? 'CLOSE PLAN' : 'ðŸš€ V5 PLAN'}]
+                            [{showStrategy ? 'CLOSE PLAN' : '🚀 V5 PLAN'}]
                         </button>
                         {!whatsappConnected && !showQRModal && (
                             <button
@@ -201,7 +199,7 @@ function App() {
                         )}
 
                         <div className="hidden sm:block flex-1 h-px bg-jarvis-primary/20"></div>
-                        <span className="hidden sm:inline">PROTOCOL â€” ACTIVE</span>
+                        <span className="hidden sm:inline">PROTOCOL — ACTIVE</span>
                         <div className="hidden sm:block w-2 h-2 rounded-full bg-jarvis-primary/50"></div>
                     </div>
 
@@ -218,14 +216,14 @@ function App() {
                             className="bg-jarvis-primary/10 border border-jarvis-primary/30 text-jarvis-primary hover:bg-jarvis-primary/20 px-3 py-2 rounded text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap"
                             title="Toggle Voice Language"
                         >
-                            {recognitionLanguage === 'pt-BR' ? 'ðŸ‡§ðŸ‡· PT' : 'ðŸ‡ºðŸ‡¸ EN'}
+                            {recognitionLanguage === 'pt-BR' ? '🇧🇷 PT' : '🇺🇸 EN'}
                         </button>
                         <button
                             onClick={() => speak("Voice systems calibrated. Ready for instruction.")}
                             className="bg-jarvis-primary/10 border border-jarvis-primary/30 text-jarvis-primary hover:bg-jarvis-primary/20 px-3 py-2 rounded text-xs font-mono uppercase tracking-widest transition-all whitespace-nowrap"
                             title="Test Voice Output"
                         >
-                            ðŸ”Š TEST
+                            🔊 TEST
                         </button>
                     </div>
 
