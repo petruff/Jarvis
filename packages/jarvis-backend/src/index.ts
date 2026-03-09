@@ -58,6 +58,9 @@ import CloneComparison from './mindclones/cloneComparison';
 import ConsensusHistoryTracker from './mindclones/consensusHistory';
 import MultiTenantIsolationManager from './mindclones/multiTenantIsolation';
 import AdvancedRBACManager from './mindclones/advancedRBAC';
+
+// ── Observability & Instrumentation ──────────────────────────────────────────
+import { metricsCollector, metricsRegister } from './instrumentation/metricsCollector';
 import BackupDisasterRecoveryManager from './mindclones/backupDisasterRecovery';
 import { createDatabaseAdapter } from './db/adapter';
 import { createCacheAdapter } from './cache/adapter';
@@ -197,6 +200,29 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
                 autonomy_engine: getAutonomyEngine()?.state.running ? 'active' : 'inactive',
                 memory: 'connected',
                 meta_brain: 'active'
+            }
+        };
+    });
+
+    // ── Prometheus Metrics Endpoint ───────────────────────────────────────────────
+    fastify.get('/metrics', async function handler(request, reply) {
+        reply.type('text/plain');
+        return metricsRegister.metrics();
+    });
+
+    // ── Metrics Status/Snapshot Endpoint ──────────────────────────────────────────
+    fastify.get('/api/status/metrics', async function handler(request, reply) {
+        return {
+            status: 'OK',
+            snapshot: metricsCollector.getSnapshot(),
+            health: metricsCollector.getHealthStatus(),
+            sla_targets: {
+                ooda_cycle_duration_ms: '30min ± 2min (1800000 ± 120000)',
+                memory_query_latency_ms: '< 200',
+                react_success_rate_percent: '> 90',
+                squad_routing_accuracy_percent: '> 95',
+                redis_stream_latency_ms: '< 100 (p95)',
+                quality_gate_pass_rate_percent: '> 75'
             }
         };
     });
