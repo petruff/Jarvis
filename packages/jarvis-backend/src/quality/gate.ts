@@ -3,6 +3,7 @@ import { queryLLM } from '../llm';
 import { MissionOrchestrator } from '../orchestrator';
 import { agentBus } from '../agent-bus/redis-streams';
 import { Server } from 'socket.io';
+import { metricsCollector } from '../instrumentation/metricsCollector';
 
 const PASS_THRESHOLD = 75;
 const MAX_RETRIES = 2;
@@ -125,6 +126,9 @@ Respond ONLY with valid JSON, no markdown:
         } else {
             console.log(`[QUALITY] Mission ${mission.id} passed quality gate (${result.total}/100).`);
         }
+
+        // Record quality gate metrics
+        metricsCollector.recordQualityGateDecision(result.total, result.passed);
 
         return mission;
     }

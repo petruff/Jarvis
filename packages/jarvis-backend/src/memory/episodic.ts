@@ -2,6 +2,7 @@ import * as lancedb from 'vectordb';
 import OpenAI from 'openai';
 import { Mission } from '../types/mission';
 import * as path from 'path';
+import { metricsCollector } from '../instrumentation/metricsCollector';
 
 const TABLE_NAME = 'jarvis_episodes';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -82,6 +83,7 @@ export class EpisodicMemory {
     async recall(prompt: string, squadId?: string): Promise<Episode[]> {
         if (!this.table) return [];
 
+        const startTime = Date.now();
         try {
             const vector = await this.embed(prompt);
 
@@ -92,6 +94,8 @@ export class EpisodicMemory {
             }
 
             const results = await query.execute();
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('episodic', latency, 'success');
 
             // Explicitly filter by distance and take top K
             const filteredResults = results
@@ -112,6 +116,8 @@ export class EpisodicMemory {
                 status: res.status
             }));
         } catch (err: any) {
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('episodic', latency, 'error');
             console.error(`[EPISODIC] Recall failed: ${err.message}`);
             return [];
         }

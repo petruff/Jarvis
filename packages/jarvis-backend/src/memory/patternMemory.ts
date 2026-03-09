@@ -31,6 +31,7 @@ import * as fs from 'fs';
 import crypto from 'crypto';
 import { queryLLM } from '../llm';
 import logger from '../logger';
+import { metricsCollector } from '../instrumentation/metricsCollector';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -222,6 +223,7 @@ If no clear patterns exist, respond with: []`;
     async recallPatterns(query: string, squadId?: string, limit = 3): Promise<Pattern[]> {
         if (!this.db) return [];
 
+        const startTime = Date.now();
         try {
             // Apply decay before retrieval
             this.applyDecay();
@@ -237,7 +239,11 @@ If no clear patterns exist, respond with: []`;
                 LIMIT 20
             `).all(squad) as Pattern[];
 
-            if (!rows.length) return [];
+            if (!rows.length) {
+                const latency = Date.now() - startTime;
+                metricsCollector.recordMemoryQueryLatency('pattern', latency, 'success');
+                return [];
+            }
 
             // Semantic filter: pick top-N most relevant to query using keyword overlap
             const queryWords = new Set(query.toLowerCase().split(/\s+/).filter(w => w.length > 3));
@@ -246,6 +252,9 @@ If no clear patterns exist, respond with: []`;
                 const overlap = [...queryWords].filter(w => desc.includes(w)).length;
                 return { pattern: r, score: overlap + r.frequency * r.decayScore };
             });
+
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('pattern', latency, 'success');
 
             return scored
                 .sort((a, b) => b.score - a.score)
@@ -257,6 +266,8 @@ If no clear patterns exist, respond with: []`;
                         : s.pattern.examples,
                 }));
         } catch (err: unknown) {
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('pattern', latency, 'error');
             const msg = err instanceof Error ? err.message : String(err);
             logger.warn(`[PatternMemory] recallPatterns failed: ${msg}`);
             return [];

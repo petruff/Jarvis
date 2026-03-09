@@ -15,6 +15,7 @@ import { EpisodicMemory } from '../memory/episodic';
 import { sendTelegramMessage } from '../telegram';
 import { mutationStore } from '../agents/mutationStore';
 import RssParser from 'rss-parser';
+import { metricsCollector } from '../instrumentation/metricsCollector';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -236,11 +237,13 @@ export class NightlyLearningCycle {
             const durationMs = Date.now() - start;
             console.log(`[LEARNING] [MODULE] Complete: ${name} (${durationMs}ms)`);
             this.io.emit('jarvis/learning_module', { module: name, status: 'complete', durationMs });
+            metricsCollector.recordConsciousnessModuleDuration(name, durationMs, 'success');
             return { status: 'completed', durationMs, findings };
         } catch (err: any) {
             const durationMs = Date.now() - start;
             console.error(`[LEARNING] [MODULE] Failed: ${name} — ${err.message}`);
             this.io.emit('jarvis/learning_module', { module: name, status: 'failed', error: err.message });
+            metricsCollector.recordConsciousnessModuleDuration(name, durationMs, 'failed');
             return { status: 'failed', durationMs, findings: '', error: err.message };
         }
     }

@@ -2,6 +2,7 @@ import * as lancedb from 'vectordb';
 import OpenAI from 'openai';
 import { config } from '../config/loader';
 import * as path from 'path';
+import { metricsCollector } from '../instrumentation/metricsCollector';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const HYBRID_TABLE_NAME = 'jarvis_knowledge_base';
@@ -124,25 +125,34 @@ export class HybridMemory {
     async searchKnowledge(query: string, nResults: number = 3, bucket?: 'PERSONAL' | 'WORKSPACE' | 'KNOWLEDGE'): Promise<DocumentChunk[]> {
         if (!this.table) throw new Error('LanceDB table offline.');
 
-        const queryEmbedding = await this.embed(query);
-        let search = this.table.search(queryEmbedding);
+        const startTime = Date.now();
+        try {
+            const queryEmbedding = await this.embed(query);
+            let search = this.table.search(queryEmbedding);
 
-        if (bucket) {
-            console.log(`[HybridMemory] Filtering search for bucket: ${bucket}`);
-            search = search.where(`bucket = '${bucket}'`);
-        }
-
-        const results = await search.limit(nResults).execute();
-
-        return results.map((res: any) => ({
-            id: res.id,
-            text: res.text,
-            bucket: res.bucket,
-            metadata: {
-                docId: res.docId,
-                chunkIndex: res.chunkIndex,
-                distance: res._distance
+            if (bucket) {
+                console.log(`[HybridMemory] Filtering search for bucket: ${bucket}`);
+                search = search.where(`bucket = '${bucket}'`);
             }
-        }));
+
+            const results = await search.limit(nResults).execute();
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('hybrid', latency, 'success');
+
+            return results.map((res: any) => ({
+                id: res.id,
+                text: res.text,
+                bucket: res.bucket,
+                metadata: {
+                    docId: res.docId,
+                    chunkIndex: res.chunkIndex,
+                    distance: res._distance
+                }
+            }));
+        } catch (err: any) {
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('hybrid', latency, 'error');
+            throw err;
+        }
     }
 }

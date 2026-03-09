@@ -19,6 +19,7 @@ import { EpisodicMemory } from './memory/episodic';
 import { GoalManager } from './goals/goalManager';
 import { MissionOrchestrator } from './orchestrator';
 import { ConfidenceEngine } from './autonomy/confidenceEngine';
+import { metricsCollector } from './instrumentation/metricsCollector';
 
 // ─── Signal Types ─────────────────────────────────────────────────────────────
 
@@ -185,6 +186,7 @@ export class AutonomyEngine {
         this.isRunning = true;
         this.state.cycleCount++;
         this.state.lastTick = new Date();
+        const cycleStartTime = Date.now();
 
         try {
             // ── HTN LONG-HORIZON WAKE UP ────────────────────────────────────
@@ -249,6 +251,8 @@ export class AutonomyEngine {
         } catch (err: any) {
             this.log(`[Autonomy] OODA cycle error: ${err.message}`);
         } finally {
+            const cycleDurationMs = Date.now() - cycleStartTime;
+            metricsCollector.recordOodaCycleDuration(cycleDurationMs);
             this.isRunning = false;
         }
     }

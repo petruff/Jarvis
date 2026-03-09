@@ -3,6 +3,7 @@ import { Mission } from '../types/mission';
 import { queryLLM } from '../llm';
 import * as path from 'path';
 import * as fs from 'fs';
+import { metricsCollector } from '../instrumentation/metricsCollector';
 
 export interface CompanyContext {
     goals: string[];
@@ -127,11 +128,16 @@ export class SemanticMemory {
 
     async getFact(key: string): Promise<string | null> {
         if (!this.db) return null;
+        const startTime = Date.now();
         try {
             const stmt = this.db.prepare('SELECT value FROM facts WHERE key = ? LIMIT 1');
             const result = stmt.get(key) as { value: string } | undefined;
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('semantic', latency, 'success');
             return result ? result.value : null;
         } catch (err: any) {
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('semantic', latency, 'error');
             console.error(`[SEMANTIC] Get fact failed: ${err.message}`);
             return null;
         }
@@ -141,6 +147,7 @@ export class SemanticMemory {
         if (!this.db) {
             return { goals: [], metrics: {}, lessons: [], founderLanguage: 'en' };
         }
+        const startTime = Date.now();
         try {
             const goalsRows = this.db.prepare('SELECT text, objective FROM goals').all() as any[];
             const metricsRows = this.db.prepare('SELECT key, value FROM metrics LIMIT 10').all() as any[];
@@ -153,8 +160,13 @@ export class SemanticMemory {
             metricsRows.forEach(r => metrics[r.key] = r.value);
             const lessons = lessonsRows.map(r => r.value);
 
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('semantic', latency, 'success');
+
             return { goals, metrics, lessons, founderLanguage: lang };
         } catch (err: any) {
+            const latency = Date.now() - startTime;
+            metricsCollector.recordMemoryQueryLatency('semantic', latency, 'error');
             console.error(`[SEMANTIC] Context retrieval failed: ${err.message}`);
             return { goals: [], metrics: {}, lessons: [], founderLanguage: 'en' };
         }

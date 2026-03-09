@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { dynamicInterpreter } from './tools/dynamicInterpreter';
+import { metricsCollector } from './instrumentation/metricsCollector';
 
 const execAsync = promisify(exec);
 
@@ -1101,6 +1102,17 @@ Outcome: ${finalAnswer}`;
         socket.emit('squad/update', { agentId, status: 'idle', task: 'Mission Complete' });
         socket.emit('squad/log', { agentId, message: `Mission Complete.` });
     }
+
+    // Record ReAct loop metrics
+    const loopDurationMs = Date.now() - startTime;
+    const toolCalls = history.filter(h => h.action && h.action !== 'REASON_ERROR' && h.action !== 'SKIP' && h.action !== 'SYSTEM').length;
+    const qualityScores = history.filter(h => h.evaluation_score !== undefined).map(h => h.evaluation_score);
+    const avgQualityScore = qualityScores.length > 0
+        ? (qualityScores.reduce((a, b) => a + b, 0) / qualityScores.length) * 100
+        : 75;
+    const success = finalAnswer !== "Mission unfinished." && finalAnswer !== "Mission timed out after 120s.";
+
+    metricsCollector.recordReActLoopCompletion(loopDurationMs, history.length, toolCalls, avgQualityScore, success);
 
     return finalAnswer;
 };

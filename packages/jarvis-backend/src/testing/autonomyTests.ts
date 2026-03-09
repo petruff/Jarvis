@@ -406,7 +406,7 @@ export const runOODAValidation24h = async () => {
         const autonomyEngine = getAutonomyEngine();
         if (!autonomyEngine) break;
 
-        const status = autonomyEngine.getStatus();
+        const status = autonomyEngine.getStatus() as any;
 
         if (status.lastCycleTime) {
             cycleDurations.push(status.cycleTime || 0);
