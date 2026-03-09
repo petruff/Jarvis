@@ -511,6 +511,24 @@ class MetricsCollector {
     }
 
     /**
+     * RECORD DNA VARIANT USAGE
+     * Track agent DNA performance per mission
+     */
+    recordDNAVariantUsage(agentId: string, qualityScore: number, status: 'success' | 'failure'): void {
+        try {
+            // Track in Prometheus (optional counter)
+            // Can add DNA-specific histogram here if needed
+            if (status === 'success') {
+                this.reActSuccessCounter.labels(agentId).inc();
+            } else {
+                this.reActFailureCounter.labels(agentId).inc();
+            }
+        } catch (err) {
+            // Silently ignore metrics errors
+        }
+    }
+
+    /**
      * HEALTH CHECK
      * Returns quick health status
      */

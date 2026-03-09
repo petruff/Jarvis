@@ -17,6 +17,7 @@ import { mutationStore } from '../agents/mutationStore';
 import RssParser from 'rss-parser';
 import { metricsCollector } from '../instrumentation/metricsCollector';
 import { consciousnessWatchdog } from './timeout-watchdog';
+import { dnaTracker } from '../agents/dna-tracker';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -442,10 +443,32 @@ Update confidence levels for the next cycle based on this review.`;
     // ─── DNA Mutation Extraction ─────────────────────────────────────────────────
 
     private async extractDnaMutations(retrospectiveFindings: string): Promise<DnaMutation[]> {
+        const mutations: DnaMutation[] = [];
+
         try {
+            // Phase 3.2: Get DNA tracking suggestions (performance-based mutations)
+            const dnaTrackerSummary = dnaTracker.getSummary();
+            let trackerMutationPrompt = '';
+
+            if (dnaTrackerSummary.agentsNeedingMutation.length > 0) {
+                const trackerCandidates = dnaTrackerSummary.agentsNeedingMutation
+                    .flatMap(agentId => dnaTracker.generateMutationCandidates(agentId))
+                    .slice(0, 3);
+
+                if (trackerCandidates.length > 0) {
+                    trackerMutationPrompt = `\n\nADDITIONAL DNA PERFORMANCE DATA:
+The following agents show performance degradation and are candidates for DNA mutations:
+${trackerCandidates.map(c =>
+                        `- ${c.agentId}: ${c.reason} (Impact Score: ${c.impactScore})`
+                    ).join('\n')}
+
+Consider these performance-based suggestions in your mutation extraction.`;
+                }
+            }
+
             const prompt = `Based on these retrospective findings from JARVIS's nightly learning cycle:
 
-${retrospectiveFindings.slice(0, 3000)}
+${retrospectiveFindings.slice(0, 3000)}${trackerMutationPrompt}
 
 Extract proposed DNA mutations as JSON array. Each mutation should be specific and actionable.
 Format:
@@ -464,12 +487,13 @@ Return ONLY valid JSON. Maximum 5 mutations. Only propose mutations with strong 
             const response = await queryLLM('JARVIS DNA Mutation Extractor', prompt, 'forge');
             const jsonMatch = response.match(/\[[\s\S]*\]/);
             if (jsonMatch) {
-                return JSON.parse(jsonMatch[0]) as DnaMutation[];
+                mutations.push(...(JSON.parse(jsonMatch[0]) as DnaMutation[]));
             }
         } catch (err: any) {
             console.warn(`[LEARNING] DNA mutation extraction failed: ${err.message}`);
         }
-        return [];
+
+        return mutations.slice(0, 5);
     }
 
     // ─── Compile Nightly Report ───────────────────────────────────────────────────

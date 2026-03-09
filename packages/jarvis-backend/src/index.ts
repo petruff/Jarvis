@@ -34,6 +34,7 @@ import { agentBus } from './agent-bus/redis-streams';
 import { getRateLimiterStatus, resetCircuitBreaker, trip } from './rateLimiter';
 import { metaBrain } from './metaBrain';
 import { mutationStore } from './agents/mutationStore';
+import { dnaTracker } from './agents/dna-tracker';
 import { genesisEngine } from './agents/genesis';
 import { missionControl } from './missionControl';
 import { config } from './config/loader';
@@ -47,6 +48,7 @@ import { registerSkillRoutes } from './api/skills';
 import { registerContextRoutes } from './api/context';
 import { registerChainRoutes } from './api/chains';
 import { registerVoiceRoutes } from './api/voice';
+import { registerDNAMutationRoutes } from './api/dna-mutations';
 // import { registerKnowledgeRoutes } from './api/knowledge'; // COMMENTED OUT: missing pdf-parse dependency
 import { registerMindCloneRoutes } from './api/mindclones';
 import { initRealtime } from './api/realtime';
@@ -715,6 +717,13 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         console.log('[ROUTE-REG] ✓ Test routes registered');
     } catch (err: any) {
         console.error('[ROUTE-REG] ERROR registering test routes:', err.message);
+    }
+
+    try {
+        await registerDNAMutationRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ DNA mutation routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering DNA mutations:', err.message);
     }
 
     console.log('[ROUTE-REG] ✅ ALL PHASE 7 ROUTES REGISTERED SUCCESSFULLY');

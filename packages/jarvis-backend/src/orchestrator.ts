@@ -7,6 +7,7 @@ import { agentRegistry } from './agents/registry';
 import { episodicMemory, goalManager, qualityGate, hookSystem, recoverySystem, patternMemory } from './index';
 import { agentBus } from './agent-bus/redis-streams';
 import { planner } from './planner';
+import { dnaTracker } from './agents/dna-tracker';
 
 export class MissionOrchestrator {
     public io: Server;
@@ -262,6 +263,34 @@ export class MissionOrchestrator {
 
         // HOOK D: Episodic Consolidate
         await episodicMemory.consolidate(mission);
+
+        // ── Phase 3.2: Track DNA Variant Usage ──────────────────────────────
+        try {
+            if (mission.agentIds && mission.agentIds.length > 0) {
+                for (const agentId of mission.agentIds) {
+                    const agent = agentRegistry.getAgent(agentId);
+                    if (agent) {
+                        const success = mission.status === 'DONE' && !mission.result?.includes('Error');
+                        const qualityScore = mission.qualityScore || 75;
+                        const latencyMs = mission.durationMs || 0;
+                        const confidence = (mission.qualityScore || 75) / 100;
+                        const routingAccuracy = 0.95; // Default, can be from squad metrics
+
+                        dnaTracker.recordUsage(
+                            agentId,
+                            agent.dna,
+                            success,
+                            qualityScore,
+                            latencyMs,
+                            confidence,
+                            routingAccuracy
+                        );
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn(`[DNATracker] Failed to record variant usage: ${(err as Error).message}`);
+        }
 
         // ── Sprint 1: Fire onMissionComplete hook ──────────────────────────
         await hookSystem.fire('onMissionComplete', {
