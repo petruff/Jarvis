@@ -5,6 +5,8 @@ import { GoalManager } from '../goals/goalManager';
 import { EpisodicMemory } from '../memory/episodic';
 import { sendTelegramMessage } from '../telegram';
 import { mutationStore, PendingMutation } from '../agents/mutationStore';
+import { metricsCollector } from '../instrumentation/metricsCollector';
+import { dnaTracker } from '../agents/dna-tracker';
 
 export interface Briefing {
     id: string;
@@ -40,23 +42,45 @@ export class BriefingGenerator {
         const goals = await this.goalManager.getActiveGoals();
         const history = await this.episodicMemory.getRecentHistory(24);
 
-        // Pull pending DNA mutations for Section 6
+        // ── Phase 3.3: Operational Metrics ──────────────────────────────────
+        const metricsSnapshot = metricsCollector.getSnapshot();
+        const healthStatus = metricsCollector.getHealthStatus();
+
+        // ── Phase 3.2: DNA Analysis ──────────────────────────────────────────
+        const dnaSummary = dnaTracker.getSummary();
         const pendingMutations = mutationStore.getPendingMutations();
         const mutationSection = pendingMutations.length > 0
             ? mutationStore.getPendingSummary()
             : '_No pending DNA mutations from last night\'s learning cycle._';
 
+        // Calculate AGI Operationality Score
+        const agiOperationalityScore = this.calculateOperationalityScore(metricsSnapshot, healthStatus);
+
         const prompt = `Generate a high-fidelity morning briefing for the Founder (Mr. Petruff).
 CONTEXT:
 Active Goals: ${JSON.stringify(goals)}
-Recent Activity (24h): ${JSON.stringify(history.map(h => ({ task: h.prompt, result: h.result.slice(0, 100) })))}
-Pending DNA Mutations: ${pendingMutations.length} awaiting approval
+Recent Activity (24h): ${JSON.stringify(history.slice(0, 5).map(h => ({ task: h.prompt, result: h.result.slice(0, 100) })))}
+
+SYSTEM HEALTH:
+- AGI Operationality Score: ${agiOperationalityScore.toFixed(1)}/100
+- OODA Cycle: ${healthStatus.oodaCycleOk ? '✓' : '✗'}
+- Memory Systems: ${healthStatus.memoryOk ? '✓' : '✗'}
+- ReAct Success Rate: ${healthStatus.reActSuccessRateOk ? '✓' : '✗'}
+- Squad Routing: ${healthStatus.squadRoutingOk ? '✓' : '✗'}
+- Quality Gates: ${healthStatus.qualityGateOk ? '✓' : '✗'}
+
+DNA EVOLUTION:
+- Total Agents Tracked: ${dnaSummary.totalAgentsTracked}
+- DNA Variants: ${dnaSummary.totalVariantsTracked}
+- Avg Quality: ${dnaSummary.averageQuality.toFixed(1)}/100
+- Agents Needing Mutation: ${dnaSummary.agentsNeedingMutation.length}
+- Pending Mutations: ${pendingMutations.length}
 
 The briefing must have 5 sections:
-1. Executive Summary (Tone: Tactical, Command-level)
-2. Strategic Progress (Goal alignment)
-3. Operational Pulse (Recent squad results)
-4. Decision Queue (Tasks needing approval)
+1. Executive Summary (Tone: Tactical, Command-level, include AGI score)
+2. Strategic Progress (Goal alignment and DNA evolution)
+3. Operational Pulse (System health and squad results)
+4. Decision Queue (Tasks needing approval, DNA mutations)
 5. Daily Mission Recommendation
 
 Return JSON format:
@@ -123,6 +147,65 @@ Return JSON format:
             });
             console.log(`[BRIEFING] Delivered to Telegram ID: ${founderId} (${pendingMutations.length} mutations included)`);
         }
+    }
+
+    /**
+     * Calculate AGI Operationality Score (0-100) based on system metrics
+     */
+    private calculateOperationalityScore(metricsSnapshot: any, healthStatus: any): number {
+        let score = 50; // Base score
+
+        // OODA Cycle (20 points)
+        if (healthStatus.oodaCycleOk) {
+            score += 20;
+        } else {
+            score -= 5;
+        }
+
+        // Memory Systems (15 points)
+        if (healthStatus.memoryOk) {
+            score += 15;
+        } else {
+            score -= 10;
+        }
+
+        // ReAct Success Rate (20 points)
+        if (healthStatus.reActSuccessRateOk) {
+            score += 20;
+        } else {
+            score -= 15;
+        }
+
+        // Squad Routing (15 points)
+        if (healthStatus.squadRoutingOk) {
+            score += 15;
+        } else {
+            score -= 10;
+        }
+
+        // Quality Gates (15 points)
+        if (healthStatus.qualityGateOk) {
+            score += 15;
+        } else {
+            score -= 10;
+        }
+
+        // Redis Streams (5 points)
+        if (healthStatus.redisStreamOk) {
+            score += 5;
+        } else {
+            score -= 5;
+        }
+
+        // DNA Health bonus (up to 5 points)
+        const dnaSummary = dnaTracker.getSummary();
+        if (dnaSummary.averageQuality >= 85) {
+            score += 5;
+        } else if (dnaSummary.averageQuality >= 75) {
+            score += 3;
+        }
+
+        return Math.min(100, Math.max(0, score));
     }
 
     stop(): void {

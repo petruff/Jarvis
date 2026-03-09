@@ -49,6 +49,7 @@ import { registerContextRoutes } from './api/context';
 import { registerChainRoutes } from './api/chains';
 import { registerVoiceRoutes } from './api/voice';
 import { registerDNAMutationRoutes } from './api/dna-mutations';
+import { registerBriefingRoutes } from './api/briefings';
 // import { registerKnowledgeRoutes } from './api/knowledge'; // COMMENTED OUT: missing pdf-parse dependency
 import { registerMindCloneRoutes } from './api/mindclones';
 import { initRealtime } from './api/realtime';
@@ -724,6 +725,13 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         console.log('[ROUTE-REG] ✓ DNA mutation routes registered');
     } catch (err: any) {
         console.error('[ROUTE-REG] ERROR registering DNA mutations:', err.message);
+    }
+
+    try {
+        await registerBriefingRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Briefing routes registered');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering briefings:', err.message);
     }
 
     console.log('[ROUTE-REG] ✅ ALL PHASE 7 ROUTES REGISTERED SUCCESSFULLY');
