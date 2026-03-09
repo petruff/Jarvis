@@ -1,0 +1,18 @@
+apiVersion: 1
+
+providers:
+  - name: 'JARVIS AGI Dashboards'
+    orgId: 1
+    folder: 'AGI'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+
+dashboards:
+  - name: 'JARVIS AGI Operationality'
+    uid: 'jarvis-agi-operationality'
+    path: /etc/grafana/provisioning/dashboards/jarvis-agi-operationality.json
+    url: ''
+    collapsed: false

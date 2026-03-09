@@ -1,0 +1,350 @@
+{
+  "dashboard": {
+    "title": "JARVIS AGI Operationality (95/100 Target)",
+    "description": "Comprehensive monitoring of JARVIS AGI system health and performance metrics across OODA autonomy, consciousness learning, agent execution, and memory systems.",
+    "tags": ["jarvis", "agi", "operationality", "autonomy", "consciousness"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 0,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "OODA Cycle Duration (30±2min target)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "jarvis_autonomy_ooda_cycle_duration_ms / 1000 / 60",
+            "legendFormat": "Cycle Duration (minutes)",
+            "refId": "A"
+          },
+          {
+            "expr": "30",
+            "legendFormat": "Target (30min)",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [{"label": "Minutes", "format": "short"}],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [28], "type": "lt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "last"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "message": "OODA cycle duration below 28 minutes",
+          "name": "OODA Duration Too Fast",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 2,
+        "title": "OODA Cycle Count",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "increase(jarvis_autonomy_cycle_counter[1h])",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "orientation": "auto",
+          "textMode": "auto"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Consciousness Module Duration",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "jarvis_consciousness_module_duration_ms",
+            "legendFormat": "{{module}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [{"label": "Milliseconds", "format": "short"}]
+      },
+      {
+        "id": 4,
+        "title": "Memory Query Latency by System",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, jarvis_memory_query_latency_ms)",
+            "legendFormat": "p95 - {{system}}",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, jarvis_memory_query_latency_ms)",
+            "legendFormat": "p50 - {{system}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [{"label": "Milliseconds", "format": "short"}],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [200], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "last"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "message": "Memory query latency p95 > 200ms",
+          "name": "High Memory Latency",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 5,
+        "title": "ReAct Loop Success Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(jarvis_agent_react_success_counter[5m]) / (rate(jarvis_agent_react_success_counter[5m]) + rate(jarvis_agent_react_failure_counter[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 75},
+                {"color": "green", "value": 85}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "orientation": "auto",
+          "textMode": "auto"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Quality Gate Pass Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(jarvis_quality_gate_pass_counter[5m]) / (rate(jarvis_quality_gate_pass_counter[5m]) + rate(jarvis_quality_gate_fail_counter[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 75},
+                {"color": "green", "value": 90}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "orientation": "auto",
+          "textMode": "auto"
+        }
+      },
+      {
+        "id": 7,
+        "title": "ReAct Loop Duration Distribution",
+        "type": "histogram",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "jarvis_agent_react_loop_duration_ms_bucket",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [{"label": "Count", "format": "short"}],
+        "xaxis": {"label": "Duration (ms)"}
+      },
+      {
+        "id": 8,
+        "title": "Squad Routing Accuracy",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "jarvis_squad_routing_accuracy_gauge * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 70},
+                {"color": "green", "value": 85}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "orientation": "auto",
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        }
+      },
+      {
+        "id": 9,
+        "title": "Overall System Health",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 20},
+        "targets": [
+          {
+            "expr": "(jarvis_agent_react_success_counter / (jarvis_agent_react_success_counter + jarvis_agent_react_failure_counter) * 0.3) + (jarvis_quality_gate_pass_counter / (jarvis_quality_gate_pass_counter + jarvis_quality_gate_fail_counter) * 0.3) + (jarvis_squad_routing_accuracy_gauge * 0.2) + (100 - (abs(jarvis_autonomy_ooda_cycle_duration_ms / 1800000 - 1) * 100) / 0.067) / 100 * 0.2",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 75},
+                {"color": "green", "value": 95}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "orientation": "auto",
+          "textMode": "auto",
+          "textSize": 100
+        }
+      },
+      {
+        "id": 10,
+        "title": "Agent Quality Scores Distribution",
+        "type": "histogram",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "jarvis_agent_react_quality_score_bucket",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [{"label": "Count", "format": "short"}],
+        "xaxis": {"label": "Quality Score (0-100)"}
+      },
+      {
+        "id": 11,
+        "title": "Memory Query Count by Status",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "sum(increase(jarvis_memory_query_counter[1h])) by (status)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "displayLabels": ["percent"],
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom"
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "Consciousness Module Success Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "sum(increase(jarvis_consciousness_module_counter{status='success'}[1h])) / sum(increase(jarvis_consciousness_module_counter[1h])) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "yellow", "value": 80},
+                {"color": "green", "value": 95}
+              ]
+            },
+            "unit": "percent"
+          }
+        },
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "orientation": "auto",
+          "textMode": "auto"
+        }
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    }
+  },
+  "overwrite": true
+}
