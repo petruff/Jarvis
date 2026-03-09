@@ -16,6 +16,7 @@ import { sendTelegramMessage } from '../telegram';
 import { mutationStore } from '../agents/mutationStore';
 import RssParser from 'rss-parser';
 import { metricsCollector } from '../instrumentation/metricsCollector';
+import { consciousnessWatchdog } from './timeout-watchdog';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -219,6 +220,8 @@ export class NightlyLearningCycle {
             console.error(`[LEARNING] Critical failure: ${err.message}`);
             result.nightlyReport = `Learning cycle failed: ${err.message}`;
         } finally {
+            // Ensure all watchdog timers are cleared
+            consciousnessWatchdog.clearAll();
             this.isRunning = false;
         }
 
@@ -232,17 +235,38 @@ export class NightlyLearningCycle {
         console.log(`[LEARNING] [MODULE] Starting: ${name}`);
         this.io.emit('jarvis/learning_module', { module: name, status: 'running' });
 
+        // Start watchdog timeout for this module
+        let timeoutTriggered = false;
+        const timeoutHandler = (moduleName: string) => {
+            timeoutTriggered = true;
+            console.error(`[LEARNING] [MODULE] Timeout: ${moduleName} exceeded maximum duration`);
+            this.io.emit('jarvis/learning_module', { module: moduleName, status: 'timeout', error: 'Module timeout' });
+        };
+
+        consciousnessWatchdog.startModuleTimeout(name, timeoutHandler);
+
         try {
             const findings = await fn();
+
+            if (timeoutTriggered) {
+                const durationMs = Date.now() - start;
+                console.warn(`[LEARNING] [MODULE] Timeout occurred: ${name} (${durationMs}ms)`);
+                consciousnessWatchdog.clearModuleTimeout(name);
+                metricsCollector.recordConsciousnessModuleDuration(name, durationMs, 'failed');
+                return { status: 'failed', durationMs, findings: '', error: 'Module timeout during execution' };
+            }
+
             const durationMs = Date.now() - start;
             console.log(`[LEARNING] [MODULE] Complete: ${name} (${durationMs}ms)`);
             this.io.emit('jarvis/learning_module', { module: name, status: 'complete', durationMs });
+            consciousnessWatchdog.clearModuleTimeout(name);
             metricsCollector.recordConsciousnessModuleDuration(name, durationMs, 'success');
             return { status: 'completed', durationMs, findings };
         } catch (err: any) {
             const durationMs = Date.now() - start;
             console.error(`[LEARNING] [MODULE] Failed: ${name} — ${err.message}`);
             this.io.emit('jarvis/learning_module', { module: name, status: 'failed', error: err.message });
+            consciousnessWatchdog.clearModuleTimeout(name);
             metricsCollector.recordConsciousnessModuleDuration(name, durationMs, 'failed');
             return { status: 'failed', durationMs, findings: '', error: err.message };
         }
