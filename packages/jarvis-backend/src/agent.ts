@@ -10,6 +10,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { dynamicInterpreter } from './tools/dynamicInterpreter';
 import { metricsCollector } from './instrumentation/metricsCollector';
+import { reactSuccessValidator } from './agent/react-success-validator';
 
 const execAsync = promisify(exec);
 
@@ -1103,7 +1104,7 @@ Outcome: ${finalAnswer}`;
         socket.emit('squad/log', { agentId, message: `Mission Complete.` });
     }
 
-    // Record ReAct loop metrics
+    // Record ReAct loop metrics and validate success
     const loopDurationMs = Date.now() - startTime;
     const toolCalls = history.filter(h => h.action && h.action !== 'REASON_ERROR' && h.action !== 'SKIP' && h.action !== 'SYSTEM').length;
     const qualityScores = history.filter(h => h.evaluation_score !== undefined).map(h => h.evaluation_score);
@@ -1112,7 +1113,35 @@ Outcome: ${finalAnswer}`;
         : 75;
     const success = finalAnswer !== "Mission unfinished." && finalAnswer !== "Mission timed out after 120s.";
 
-    metricsCollector.recordReActLoopCompletion(loopDurationMs, history.length, toolCalls, avgQualityScore, success);
+    // Build step metrics for validator
+    let stepIndex = 0;
+    const stepMetrics = history.map((h) => ({
+        step: stepIndex++,
+        toolName: h.action?.split('(')[0],
+        evaluationScore: (h.evaluation_score || 0.5) * 100,
+        reasoningQuality: (h.action === 'REASON_ERROR' ? 'parse_error' : 'valid_json') as 'valid_json' | 'parse_error' | 'malformed' | 'timeout',
+        toolCallSuccess: !h.action || h.action.includes('ERROR') ? false : true,
+        durationMs: 1000 // Average per step
+    })).filter((m) => m.step < 10) as Array<{step: number; toolName?: string; evaluationScore: number; reasoningQuality: 'valid_json' | 'parse_error' | 'malformed' | 'timeout'; toolCallSuccess: boolean; durationMs: number}>;
+
+    // Validate ReAct completion
+    const successReport = reactSuccessValidator.validateCompletion(
+        history.length,
+        toolCalls,
+        qualityScores.map(s => s * 100),
+        stepMetrics,
+        finalAnswer
+    );
+
+    // Log validation results
+    console.log(`[AGENT:${agentId}] ReAct Success Report:`);
+    successReport.reasons.forEach(r => console.log(`  ${r}`));
+    if (successReport.warnings.length > 0) {
+        console.log(`  Warnings:`);
+        successReport.warnings.forEach(w => console.log(`    - ${w}`));
+    }
+
+    metricsCollector.recordReActLoopCompletion(loopDurationMs, history.length, toolCalls, avgQualityScore, successReport.successCriteriaMet);
 
     return finalAnswer;
 };
