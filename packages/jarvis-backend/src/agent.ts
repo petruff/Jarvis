@@ -405,6 +405,40 @@ const INTERNAL_MEMORY_TOOLS = [
             },
             required: ['missionId']
         }
+    },
+    // ─── Phase 4: Advanced AGI Capabilities ────────────────────────────────────
+    {
+        name: 'query_world_state',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'WORLD MONITOR: Query the current global state (aviation, maritime, geopolitics, commodities). Use this to understand real-world context for market decisions, geopolitical analysis, or logistics planning.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                domain: { type: 'string', description: 'Optional: filter to a specific domain (aviation, maritime, geopolitics, commodities). If omitted, returns full state.' }
+            }
+        }
+    },
+    {
+        name: 'analyze_vision',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'YOLO VISION: Analyze an image using computer vision object detection. Returns detected objects with confidence scores. Useful for visual inspection, quality control, or scene understanding.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                imageBase64: { type: 'string', description: 'Base64-encoded image data to analyze' },
+                analysisType: { type: 'string', description: 'Type of analysis: "objects" (default), "scene", or "text"', enum: ['objects', 'scene', 'text'] }
+            },
+            required: ['imageBase64']
+        }
+    },
+    {
+        name: 'browser_screenshot',
+        _serverId: 'JARVIS_INTERNAL',
+        description: 'GHOST HAND: Take a screenshot of the current browser state. Use this to verify navigation or see what\'s displayed after a click/type action.',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
     }
 ];
 
@@ -883,6 +917,81 @@ async function handleInternalTool(toolName: string, args: Record<string, any>, a
                 return `Branch "${branchName}" merged successfully into main.\n${stdout || stderr}`;
             } catch (err: any) {
                 return `merge_worktree error: ${err.message}`;
+            }
+        }
+
+        // ─── Phase 4: Advanced AGI Capabilities ────────────────────────────────────
+        if (toolName === 'query_world_state') {
+            try {
+                const { worldMonitor } = require('./intelligence/worldMonitor');
+                if (!worldMonitor) return 'WorldMonitor not available.';
+
+                const state = worldMonitor.getState();
+                const { domain } = args;
+
+                if (domain) {
+                    const domainState = (state as any)[domain];
+                    if (!domainState) {
+                        return `Unknown domain: ${domain}. Available: aviation, maritime, geopolitics, commodities`;
+                    }
+                    return `[WORLD MONITOR - ${domain.toUpperCase()}]\n${JSON.stringify(domainState, null, 2)}`;
+                }
+
+                return `[WORLD MONITOR - FULL STATE]\nTimestamp: ${state.timestamp}\n\nAVIATION:\n${JSON.stringify(state.aviation, null, 2)}\n\nMARITIME:\n${JSON.stringify(state.maritime, null, 2)}\n\nGEOPOLITICS:\n${JSON.stringify(state.geopolitics, null, 2)}\n\nCOMMODITIES:\n${JSON.stringify(state.commodities, null, 2)}`;
+            } catch (err: any) {
+                return `query_world_state error: ${err.message}`;
+            }
+        }
+
+        if (toolName === 'analyze_vision') {
+            try {
+                const { yoloBridge } = require('./autonomy/yoloBridge');
+                if (!yoloBridge) return 'YOLO vision system not available.';
+
+                const { imageBase64, analysisType = 'objects' } = args;
+                if (!imageBase64) return 'Error: imageBase64 is required.';
+
+                // Simulate YOLO analysis (in production would call actual model)
+                const result = await yoloBridge.analyzeImage(imageBase64);
+
+                let analysis = `[YOLO VISION ANALYSIS - ${analysisType.toUpperCase()}]\n`;
+                analysis += `Confidence: ${(result.confidence * 100).toFixed(1)}%\n\n`;
+                analysis += `Summary: ${result.summary}\n\n`;
+                analysis += `Detected Objects:\n`;
+                result.detections.forEach((d: any) => {
+                    analysis += `  - ${d.class} (confidence: ${(d.confidence * 100).toFixed(1)}%)\n`;
+                });
+                analysis += `\nRecommended Actions:\n`;
+                result.actionItems.forEach((action: string) => {
+                    analysis += `  - ${action}\n`;
+                });
+
+                return analysis;
+            } catch (err: any) {
+                return `analyze_vision error: ${err.message}`;
+            }
+        }
+
+        if (toolName === 'browser_screenshot') {
+            try {
+                const { domCortex } = require('./autonomy/domCortex');
+                if (!domCortex) return 'DomCortex not available.';
+
+                const screenshot = await domCortex.takeScreenshot();
+                if (!screenshot) return 'Failed to take screenshot (no page loaded).';
+
+                const path = require('path');
+                const fs = require('fs');
+                const screenshotPath = path.join(process.cwd(), '.temp', `browser_${Date.now()}.jpg`);
+
+                if (!fs.existsSync(path.join(process.cwd(), '.temp'))) {
+                    fs.mkdirSync(path.join(process.cwd(), '.temp'), { recursive: true });
+                }
+
+                fs.writeFileSync(screenshotPath, screenshot);
+                return `Browser screenshot saved to: ${screenshotPath}. Use with analyze_vision if you need to understand what's displayed.`;
+            } catch (err: any) {
+                return `browser_screenshot error: ${err.message}`;
             }
         }
 
