@@ -18,6 +18,7 @@ import LeftPanel from './components/LeftPanel';
 import RightPanel from './components/RightPanel';
 import GeoSentinel from './components/GeoSentinel';
 import KnowledgeGraphUI from './components/KnowledgeGraphUI';
+import Phase4Dashboard from './components/Phase4Dashboard';
 
 function App() {
     const { voiceState, transcript, speak, lastResponse, logs, sendCommand, startJarvis, stopJarvis, socket, isConnected, isTalkMode, recognitionLanguage, toggleLanguage } = useJarvisVoice();
@@ -25,6 +26,7 @@ function App() {
     const [selectedAgent, setSelectedAgent] = useState('jarvis');
     const [showDashboard, setShowDashboard] = useState(false);
     const [showStrategy, setShowStrategy] = useState(false);
+    const [showPhase4, setShowPhase4] = useState(false);
     const [whatsappConnected, setWhatsappConnected] = useState(false);
     const [showQRModal, setShowQRModal] = useState(true);
     const hasWelcomed = useRef(false);
@@ -83,6 +85,11 @@ function App() {
 
     return (
         <div className="h-screen w-screen bg-jarvis-bg text-jarvis-text selection:bg-jarvis-primary selection:text-jarvis-surface flex flex-col relative overflow-hidden font-sans">
+
+            {/* PHASE 4 ADVANCED SYSTEMS DASHBOARD */}
+            {showPhase4 && socket && (
+                <Phase4Dashboard socket={socket} onClose={() => setShowPhase4(false)} />
+            )}
 
             {/* SQUAD DASHBOARD OVERLAY */}
             {showDashboard && socket && (
@@ -177,6 +184,12 @@ function App() {
                         <span className="sm:inline">SYSTEM ONLINE</span>
                         <div className="flex-1 h-px bg-jarvis-primary/20"></div>
 
+                        <button
+                            onClick={() => setShowPhase4(!showPhase4)}
+                            className="hover:text-blue-400 hover:shadow-[0_0_15px_rgba(0,153,255,0.8)] text-blue-400 transition-all duration-300 cursor-pointer mr-2 border border-blue-400/30 px-3 py-1 bg-blue-400/10 rounded backdrop-blur-sm animate-pulse"
+                        >
+                            [{showPhase4 ? 'CLOSE' : '⚛️ PHASE 4'}]
+                        </button>
                         <button
                             onClick={() => setShowDashboard(!showDashboard)}
                             className="hover:text-cyan-400 hover:shadow-[0_0_15px_rgba(0,243,255,0.8)] transition-all duration-300 cursor-pointer mr-2 border border-jarvis-primary/30 px-3 py-1 bg-jarvis-primary/10 rounded backdrop-blur-sm animate-pulse"

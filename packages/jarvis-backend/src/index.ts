@@ -65,6 +65,9 @@ import { registerDomCortexRoutes } from './api/dom-cortex';
 import { registerWorldMonitorRoutes } from './api/world-monitor';
 import { registerYoloRoutes } from './api/yolo';
 
+// ── Phase 1.2-2.2: Operational Hardening & Testing ────────────────────────────
+import { registerTestUtilitiesRoutes } from './api/test-utilities';
+
 // ── Phase 7: Enterprise Features ──────────────────────────────────────────────
 import { registerEnterpriseRoutes } from './api/mindclones-enterprise';
 import { registerTestRoutes } from './api/test-plugin';
@@ -795,7 +798,15 @@ const routesPluginPromise = fastify.register(async function registerApplicationR
         console.error('[ROUTE-REG] ERROR registering yolo:', err.message);
     }
 
-    console.log('[ROUTE-REG] ✅ ALL ROUTES (PHASES 1-4) REGISTERED SUCCESSFULLY');
+    // ── Phase 1.2-2.2: Operational Hardening & Testing ────────────────────────────
+    try {
+        await registerTestUtilitiesRoutes(fastify);
+        console.log('[ROUTE-REG] ✓ Test utilities routes registered (Phases 1.2-2.2)');
+    } catch (err: any) {
+        console.error('[ROUTE-REG] ERROR registering test utilities:', err.message);
+    }
+
+    console.log('[ROUTE-REG] ✅ ALL ROUTES (PHASES 1-4 + TEST UTILITIES) REGISTERED SUCCESSFULLY');
 
 }, { skipEncapsulation: true, prefix: '' }); // END registerApplicationRoutes plugin - SKIP ENCAPSULATION + NO PREFIX
 

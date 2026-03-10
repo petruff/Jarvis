@@ -1,0 +1,311 @@
+/**
+ * JARVIS Iron Man Theme
+ * Premium holographic design inspired by Tony Stark's AI assistant
+ */
+
+:root {
+  /* Iron Man Color Palette */
+  --primary: #00d9ff;
+  --primary-dark: #0099ff;
+  --secondary: #ff6b35;
+  --accent: #f7b801;
+  --background: #0a0e27;
+  --surface: #0f1635;
+  --surface-light: #1a1f3a;
+  --text-primary: #e0e8ff;
+  --text-secondary: #a0b0d4;
+  --border: rgba(0, 217, 255, 0.2);
+  --glow: rgba(0, 217, 255, 0.5);
+  --danger: #ff1744;
+  --success: #00e676;
+  --warning: #ffd600;
+}
+
+/* ──── HOLOGRAPHIC GLASS EFFECT ──── */
+.holographic-card {
+  background: linear-gradient(135deg, rgba(15, 22, 53, 0.8) 0%, rgba(10, 14, 39, 0.6) 100%);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow:
+    0 0 20px rgba(0, 217, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.holographic-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 217, 255, 0.4), transparent);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+
+/* ──── NEON GLOW TEXT ──── */
+.neon-text {
+  color: var(--primary);
+  text-shadow:
+    0 0 10px var(--primary),
+    0 0 20px var(--primary),
+    0 0 30px rgba(0, 217, 255, 0.5);
+  letter-spacing: 2px;
+}
+
+.neon-text.active {
+  animation: neon-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes neon-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 10px var(--primary),
+      0 0 20px var(--primary),
+      0 0 30px rgba(0, 217, 255, 0.5);
+  }
+  50% {
+    text-shadow:
+      0 0 20px var(--primary),
+      0 0 40px var(--primary),
+      0 0 60px rgba(0, 217, 255, 0.8);
+  }
+}
+
+/* ──── CIRCULAR PROGRESS/GAUGE ──── */
+.circular-gauge {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--primary) var(--gauge-progress, 0%),
+    rgba(0, 217, 255, 0.1) var(--gauge-progress, 0%)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 0 20px rgba(0, 217, 255, 0.2),
+    0 0 30px rgba(0, 217, 255, 0.3);
+}
+
+.circular-gauge::after {
+  content: '';
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--background);
+}
+
+.circular-gauge-value {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.circular-gauge-value-number {
+  font-size: 28px;
+  font-weight: bold;
+  color: var(--primary);
+  text-shadow: 0 0 10px var(--primary);
+}
+
+.circular-gauge-value-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ──── SCAN LINE ANIMATION ──── */
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.scan-lines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 217, 255, 0.05) 0px,
+    rgba(0, 217, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  animation: scan-line 8s linear infinite;
+  z-index: 9999;
+  opacity: 0.3;
+}
+
+/* ──── STATUS INDICATOR ──── */
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 10px currentColor;
+  animation: pulse-indicator 2s ease-in-out infinite;
+}
+
+.status-indicator.online {
+  background-color: var(--success);
+  color: var(--success);
+}
+
+.status-indicator.offline {
+  background-color: var(--danger);
+  color: var(--danger);
+}
+
+.status-indicator.processing {
+  background-color: var(--primary);
+  color: var(--primary);
+}
+
+@keyframes pulse-indicator {
+  0%, 100% {
+    box-shadow: 0 0 10px currentColor;
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 20px currentColor;
+    opacity: 0.6;
+  }
+}
+
+/* ──── GRID BACKGROUND ──── */
+.grid-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(0deg, transparent 24%, rgba(0, 217, 255, 0.05) 25%, rgba(0, 217, 255, 0.05) 26%, transparent 27%, transparent 74%, rgba(0, 217, 255, 0.05) 75%, rgba(0, 217, 255, 0.05) 76%, transparent 77%, transparent),
+    linear-gradient(90deg, transparent 24%, rgba(0, 217, 255, 0.05) 25%, rgba(0, 217, 255, 0.05) 26%, transparent 27%, transparent 74%, rgba(0, 217, 255, 0.05) 75%, rgba(0, 217, 255, 0.05) 76%, transparent 77%, transparent);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ──── CORNER BRACKETS ──── */
+.corner-bracket {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--primary);
+}
+
+.corner-bracket.top-left {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+}
+
+.corner-bracket.top-right {
+  top: 0;
+  right: 0;
+  border-left: none;
+  border-bottom: none;
+}
+
+.corner-bracket.bottom-left {
+  bottom: 0;
+  left: 0;
+  border-right: none;
+  border-top: none;
+}
+
+.corner-bracket.bottom-right {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+}
+
+/* ──── DATA VISUALIZATION ──── */
+.data-line {
+  stroke: url(#gradient-primary);
+  stroke-width: 2;
+  fill: none;
+  filter: drop-shadow(0 0 3px rgba(0, 217, 255, 0.5));
+}
+
+.data-area {
+  fill: url(#gradient-fill);
+  opacity: 0.3;
+}
+
+.data-point {
+  fill: var(--primary);
+  filter: drop-shadow(0 0 5px rgba(0, 217, 255, 0.8));
+}
+
+/* ──── BUTTON STYLES ──── */
+.button-primary {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+  border: 1px solid var(--primary);
+  color: var(--background);
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px rgba(0, 217, 255, 0.3);
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+.button-primary:hover {
+  box-shadow: 0 0 25px rgba(0, 217, 255, 0.6);
+  transform: translateY(-2px);
+}
+
+.button-primary:active {
+  transform: translateY(0);
+}
+
+/* ──── OVERALL LAYOUT ──── */
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+}
+
+/* ──── SCROLLBAR STYLE ──── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.5);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-dark);
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.8);
+}
